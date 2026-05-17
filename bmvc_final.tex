@@ -42,35 +42,100 @@
 \maketitle
 
 \begin{abstract}
-This document demonstrates the format requirements for papers submitted
-to the British Machine Vision Conference.  The format is designed for
-easy on-screen reading, and to print well at one or two pages per sheet.
-Additional features include: pop-up annotations for
-citations~\cite{Authors06,Mermin89}; a margin ruler for reviewing; and a
-greatly simplified way of entering multiple authors and institutions.
-
-{\bf All authors are encouraged to read this document}, even if you have
-written many papers before.  As well as a description of the format, the
-document contains many instructions relating to formatting problems and
-errors that are common even in the work of authors who {\em have}
-written many papers before.
+	Automated baggage screening in security-critical environments faces persistent challenges 
+	including extreme class imbalance, limited availability of labeled anomaly samples, and 
+	the inherent difficulty of detecting small, heavily occluded threat objects within 
+	cluttered X-ray imagery. While supervised deep learning approaches achieve strong 
+	detection accuracy, they depend on extensive annotated datasets and frequently fail to 
+	generalize to novel or unseen threat types. We propose a \textbf{Two-Stage 
+		Reconstruction-Guided Hybrid Framework} that combines unsupervised representation 
+	learning with lightweight supervised classification for both anomaly detection and 
+	spatial localization. In the first stage, a Convolutional Autoencoder (CAE) is trained 
+	exclusively on normal baggage images; the resulting pixel-wise reconstruction error 
+	, the disparity map serves as the primary anomaly signal, from which 
+	discriminative features are extracted to train a Random Forest classifier for 
+	image-level detection. In the second stage, a patch-wise reconstruction strategy 
+	enables fine-grained spatial analysis, with connected component analysis applied to 
+	the thresholded disparity mask to identify and refine anomalous regions as padded 
+	bounding boxes. Evaluated on the large-scale SIXray benchmark, the proposed framework 
+	achieves a Detection ROC-AUC of 0.916, a detection accuracy of 99.4\%, and a 
+	localization accuracy of 0.908 at IoU $\geq$ 0.30, outperforming GANomaly, 
+	Skip-GANomaly, and Dense-GANomaly baselines while remaining computationally efficient 
+	for real-world deployment.
 \end{abstract}
 
 %-------------------------------------------------------------------------
 \section{Introduction}
 \label{sec:intro}
-The proceedings of BMVC are published only in electronic form, but it is still assumed
-that readers of the papers may wish to print the paper.   This document
-illustrates the required paper format, which is designed to read well either printed
-with two pages per sheet (``2-up''), or on screen.  Note that printing with one page
-per sheet will produce a ``large print'' version, which in many cases is not what is desired.
-To approximate the old BMVC format, print at one page per sheet, but do not choose
-the option to ``scale to fit paper''.
 
-\LaTeX\ users should use this template in order to prepare their paper.
-Users of other packages should emulate the style and layout of this
-example.  Note that best results will be achieved using {\tt pdflatex},
-which is available in most modern distributions.
+The security of modern transportation infrastructure depends on the reliable detection 
+of prohibited items within passenger baggage. X-ray screening remains the primary 
+non-intrusive mechanism for this task, enabling inspection of opaque containers without 
+physical search~\cite{tackling2016jaccard}. However, the scale of modern transit operations has 
+made purely manual interpretation untenable: security operators must analyze thousands 
+of cluttered, noisy images per shift under sustained cognitive load, and their attention 
+degrades accordingly~\cite{baggage2022abdelfatah}. Transitioning to Automated Threat Recognition 
+(ATR) systems has therefore become an operational imperative.
+
+The dominant paradigm in the literature applies supervised deep learning to this 
+problem, adapting established object detection architectures such as YOLO and Faster 
+R-CNN to the X-ray domain~\cite{efficient2024yan}. These approaches have demonstrated high 
+detection rates for specific known threat categories. However, they are fundamentally 
+constrained by two interlocking problems. First, the class imbalance in operational 
+environments is extreme: prohibited items appear in a vanishingly small fraction of 
+scans~\cite{sixray2019lingxi}, causing supervised models to bias heavily towards the majority 
+(benign) class and produce unacceptably high false-negative rates on rare threats. 
+Second, supervised models operate under a \textit{closed-set} assumption, meaning they 
+can only detect threat types present in their training data. Novel improvised devices, non-metallic 3D-printed firearms, liquid explosives, or concealed components fall outside predefined categories and are effectively invisible to such 
+systems~\cite{baggage2022abdelfatah}. Acquiring large, balanced, and annotated datasets of real 
+prohibited items is additionally expensive and logistically dangerous.
+
+Unsupervised Anomaly Detection (UAD) offers a compelling alternative by reframing 
+the problem: rather than recognizing specific threats, the system learns what 
+\textit{normal} baggage looks like and flags statistical deviations for human review. 
+Reconstruction-based methods, notably GANomaly~\cite{anomalib2022akcay} and 
+Skip-GANomaly~\cite{anomalib2022akcay}, exploit the intuition that an autoencoder trained 
+exclusively on normal images will fail to faithfully reconstruct anomalous content, 
+producing an elevated reconstruction error at the location of the threat. While this 
+approach is theoretically well-motivated, existing adversarial reconstruction methods 
+carry significant computational overhead and, critically, none provide a principled 
+mechanism for precise spatial localization of detected anomalies within the image, 
+a capability that is essential for guiding operator attention in practice.
+
+In this paper, we address these limitations with a \textbf{Two-Stage 
+	Reconstruction-Guided Hybrid Framework} designed for both accurate image-level 
+detection and fine-grained anomaly localization on X-ray security imagery. 
+Our contributions are as follows:
+
+\begin{enumerate}
+	\item \textbf{Reconstruction-Driven Feature Extraction for Classification.} We 
+	train a Convolutional Autoencoder solely on normal baggage images and derive a 
+	pixel-wise disparity map as the primary anomaly signal. Statistical features 
+	extracted from this map are used to train a Random Forest classifier, combining 
+	the generalization of unsupervised representation learning with the 
+	discriminative power of a supervised classifier, without requiring annotated 
+	anomaly samples at training time.
+	
+	\item \textbf{Patch-Wise Localization via Connected Component Analysis.} When 
+	an anomaly is detected at the image level, a patch-wise reconstruction strategy 
+	applies the autoencoder at fine spatial granularity. A threshold is applied to 
+	the resulting disparity mask to produce a binary anomaly map, from which 
+	connected components are extracted, size-filtered, and padded to form 
+	bounding box predictions.
+	
+	\item \textbf{Comprehensive Evaluation on SIXray.} We benchmark against 
+	GANomaly, Skip-GANomaly, and Dense-GANomaly on the SIXray dataset~\cite{sixray2019lingxi}, 
+	demonstrating that our framework achieves superior detection accuracy (99.4\%) 
+	and ROC-AUC (0.916), while additionally providing localization performance 
+	(IoU $\geq$ 0.30 accuracy of 0.908) that prior baselines do not report.
+\end{enumerate}
+
+The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews 
+related work in classical, supervised, and unsupervised X-ray threat detection. 
+Section~\ref{sec:method} details the proposed two-stage architecture and its loss 
+formulation. Section~\ref{sec:experiments} describes the experimental setup, datasets, 
+and evaluation metrics. Section~\ref{sec:results} presents quantitative and qualitative 
+results, and Section~\ref{sec:conclusion} concludes with directions for future work.
 
 \subsection{Paper length}
 Papers must not exceed 14 pages (excluding references). References and any appendices are unlimited.
