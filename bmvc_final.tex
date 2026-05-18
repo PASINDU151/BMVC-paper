@@ -1,5 +1,8 @@
 \documentclass{bmvc2k}
 
+\usepackage{amsmath}
+\usepackage{amssymb}
+
 %% Enter your paper number here for the review copy
 % \bmvcreviewcopy{??}
 
@@ -137,6 +140,152 @@ formulation. Section~\ref{sec:experiments} describes the experimental setup, dat
 and evaluation metrics. Section~\ref{sec:results} presents quantitative and qualitative 
 results, and Section~\ref{sec:conclusion} concludes with directions for future work.
 
+\section{Proposed Method}
+
+\subsection{Overview}
+
+The proposed framework addresses automated baggage threat detection through a two stage hybrid pipeline that combines unsupervised reconstruction based learning with supervised classification. The core insight is that a convolutional autoencoder (CAE) trained exclusively on normal X-ray images will reconstruct anomalous inputs poorly, producing elevated per pixel error in regions containing threat objects. This reconstruction error, captured as a disparity map, serves as the anomaly signal driving both image level detection and spatial localization.
+
+\begin{figure*}[t]
+\centering
+
+\includegraphics[width=0.9\linewidth]{images/encoder.png}
+
+\caption{Two stage pipeline}
+\label{fig:two-stage-pipeline}
+\end{figure*}
+
+The framework is motivated by two practical realities of real world screening: first, anomalous baggage content is rare and costly to annotate, making purely supervised approaches brittle; second, operators require not just a detection flag but a spatial indicator pointing to the suspect region. The first stage feeds disparity map features into a classifier to produce an image level binary decision. If an anomaly is detected, the second stage triggers a patch wise reconstruction process, followed by connected component analysis, to localize and bound the threatening region within the image.
+
+\subsection{Convolutional Autoencoder with Combined Loss}
+
+The foundation of both stages is a convolutional autoencoder trained solely on normal (threat free) X-ray images from the SIXray dataset. Because the model only learns to reconstruct the distribution of benign baggage content, it generalizes poorly to anomalous inputs, producing higher reconstruction error precisely where threats are present.
+
+\textbf{Architecture.} The encoder consists of four convolutional blocks, each comprising a $3\times3$ convolution, batch normalization, and ReLU activation, followed by $2\times2$ max pooling to downsample the spatial resolution. Filter depth increases progressively ($32 \to 64 \to 128 \to 256$), enabling the network to capture increasingly abstract representations of normal baggage structure at each scale. The bottleneck produces a compact latent vector encoding the essential structure of the input. The decoder mirrors the encoder symmetrically, using transposed convolutions to progressively upsample back to the original resolution of $224\times224$, with a final sigmoid activation to constrain pixel values to $[0,1]$.
+
+\begin{figure*}[t]
+\centering
+
+\includegraphics[width=0.9\linewidth]{images/enc-dec.png}
+
+\caption{Autoencoder training}
+\label{fig:autoencoder}
+\end{figure*}
+
+\textbf{Training objective.} A key design choice is the use of a combined loss function that jointly optimizes pixel level fidelity and perceptual feature similarity:
+
+\begin{equation}
+\mathcal{L}_s = \alpha_1 \mathcal{L}_f + \alpha_2 \mathcal{L}_2
+\end{equation}
+
+The first term, $\mathcal{L}_f$, is a feature level loss computed in the space of a pretrained feature extractor $f(\cdot)$, measuring the mean absolute difference between the feature representations of the original and reconstructed images across a batch of size $b_s$:
+
+\begin{equation}
+\mathcal{L}_f =
+\frac{1}{b_s}
+\sum_{i=1}^{b_s}
+\left| f(k_i) - f(k'_i) \right|
+\end{equation}
+
+The second term, $\mathcal{L}_2$, is a pixel wise mean squared error between the original image $k_i$ and its reconstruction $k'_i$:
+
+\begin{equation}
+\mathcal{L}_2 =
+\frac{1}{b_s}
+\sum_{i=1}^{b_s}
+\left| k_i - k'_i \right|^2
+\end{equation}
+
+The weighting coefficients $\alpha_1$ and $\alpha_2$ balance the contribution of each term. This combined loss is critical: $\mathcal{L}_2$ alone tends to produce blurry reconstructions that lose high frequency details, while $\mathcal{L}_f$ enforces structural and perceptual consistency. Together, they produce reconstructions that are faithful to normal imagery while remaining sensitive to subtle anomalous structures such as small metallic objects embedded in cluttered baggage.
+
+\textbf{Disparity Map Computation:}
+At inference time, for an input image $I$, the CAE produces a reconstruction $R$. The disparity map $D$ is computed as the per pixel absolute difference:
+
+\begin{equation}
+D(x,y) = \| I - R \|
+\end{equation}
+
+This map assigns high values to regions where the model's reconstruction deviates from the input, the spatial signature of anomalous content. It forms the input signal to both downstream stages.
+
+\subsection{Feature Extraction and Image Level Classification}
+
+While the raw disparity map encodes spatial anomaly information, feeding it directly to a classifier would be high dimensional and noisy. Instead, a compact set of statistical features is extracted from $D$ to produce a fixed length descriptor for downstream classification.
+
+\textbf{Feature extraction.} Features are derived from the disparity map to capture both global reconstruction error magnitude and local spatial structure. These include global statistics (mean, standard deviation, maximum, and upper percentile values of $D$), spatial concentration metrics (the proportion of pixels exceeding an error threshold), histogram based distribution descriptors, and regional block statistics capturing localized error patterns that may correspond to small threat objects. The resulting feature vector compactly summarizes the anomaly signal in a form suitable for classical machine learning, while preserving interpretability and robustness under limited labeled data.
+
+\textbf{Classifier selection.} The extracted features are used to train a Random Forest classifier, selected following empirical comparison against Extreme Gradient Boosting (XGBoost) and Logistic Regression on the same feature set. As shown in the table, the Random Forest achieved the highest performance across all metrics, reaching an accuracy of 0.82–0.99, an F1 score of 0.42–0.62, and a ROC-AUC of 0.85–0.92. Its robustness to feature scale heterogeneity, native handling of class imbalance through class weight adjustment, and strong generalization under limited anomaly labels make it well suited to this setting. The ensemble comprises 200 decision trees, with class weights set inversely proportional to class frequency to compensate for the severe imbalance between normal and anomalous samples in the SIXray dataset.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{|l|c|c|c|}
+\hline
+Model & Accuracy & F1 & ROC-AUC \\
+\hline\hline
+Random Forest & 0.82 -- 0.99 & 0.42 -- 0.62 & 0.85 -- 0.92 \\
+Extreme Gradient Boosting & 0.74 -- 0.84 & 0.32 -- 0.44 & 0.76 -- 0.79 \\
+Logistic Regression & 0.81 -- 0.87 & 0.30 -- 0.40 & 0.90 -- 0.91 \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Classification performance comparison across different models.}
+\label{tab:results}
+\end{table}
+
+\subsection{Patch Wise Localization via Connected Component Analysis}
+
+Image level detection indicates whether a threat is present but provides no spatial guidance. When the classification stage flags an image as anomalous, the localization stage is activated to identify the precise region of interest.
+
+\textbf{Patch wise reconstruction.} Rather than analyzing the full image reconstruction holistically, the localization stage operates at fine spatial granularity. The input image is upscaled to $2240\times2240$ pixels and partitioned into non overlapping tiles. Each tile is independently reconstructed by the CAE, producing a tiled disparity map that retains high spatial resolution across the full image extent. This patch wise strategy allows the model to isolate reconstruction errors to small sub regions, which is critical for detecting compact threat objects that would otherwise be diluted in a global analysis.
+
+\textbf{Localization pipeline.} The spatial anomaly signal is refined through the following sequence of operations:
+
+\textbf{Step 1 -- Disparity Computation:}
+The disparity map
+
+\begin{equation}
+D(x,y) = \| I - R \|
+\end{equation}
+
+is computed from the tile wise reconstructions, producing a high resolution map of reconstruction error across the image.
+
+\textbf{Step 2 -- Thresholding:}
+A binary mask $M$ is obtained by applying a threshold $T$:
+
+\begin{equation}
+M(x,y) =
+\begin{cases}
+1, & \text{if } D(x,y) > T \\
+0, & \text{otherwise}
+\end{cases}
+\end{equation}
+
+The threshold $T$ is optimized on the validation set by sweeping candidate values and selecting the one that maximizes localization F1 at IoU $\geq 0.3$.
+
+\textbf{Step 3 -- Connected Component Extraction:}
+Connected component analysis (CCA) is applied to the binary mask $M$ to identify spatially contiguous regions of elevated reconstruction error. Each connected component represents a candidate threat region.
+
+\textbf{Step 4 -- Component Filtering:}
+Components are filtered by size, retaining only those whose area falls within a predefined range $[min\_size, max\_size]$. This removes both noise induced micro components and large background artifacts that are unlikely to correspond to localized threats.
+
+\textbf{Step 5 -- Bounding Box Generation:}
+Each surviving component is enclosed in a padded bounding box, projected back to the coordinate space of the original image, and returned as the localization output.
+
+The hyperparameters $T$, $min\_size$, and $max\_size$ are each tuned independently on the validation set. This post processing pipeline transforms the continuous disparity signal into discrete, interpretable bounding regions, directly actionable by human screening operators.
+
+\subsection{Design Rationale}
+
+Three principles guided the framework's design:
+
+\begin{itemize}
+    \item \textbf{Label efficiency:} The CAE requires no anomaly annotations during training, and the RF classifier requires only image-level labels rather than pixel-wise segmentation masks.
+    
+    \item \textbf{Modularity:} The classification and localization stages are decoupled and can be updated independently. For instance, the RF could be replaced with a neural classifier as labeled data accumulates, without retraining the CAE.
+    
+    \item \textbf{Computational practicality:} Both the feature extraction and Random Forest inference are lightweight, and the CAE architecture is kept shallow enough for deployment in time-constrained security screening environments without GPU dependency at inference time.
+\end{itemize}
+
+\section{Template}
+
 \subsection{Paper length}
 Papers must not exceed 14 pages (excluding references). References and any appendices are unlimited.
 {\bf Only}  the acknowledgement and bibliography should be {\em excluded} from the page count: Papers must not have altered margins and formatting from those laid down by this style guide.
@@ -145,23 +294,6 @@ The bibliography should begin immediately after the paper text.  It may
 be of any length, within reason.  It must {\em not} include
 annotations, figures, or any other paraphernalia intended to subvert the
 paper length requirement.
-
-\begin{figure}
-\begin{tabular}{ccc}
-\bmvaHangBox{\fbox{\parbox{2.7cm}{~\\[2.8mm]
-\rule{0pt}{1ex}\hspace{2.24mm}\includegraphics[width=2.33cm]{images/eg1_largeprint.png}\\[-0.1pt]}}}&
-\bmvaHangBox{\fbox{\includegraphics[width=2.8cm]{images/eg1_largeprint.png}}}&
-\bmvaHangBox{\fbox{\includegraphics[width=5.6cm]{images/eg1_2up.png}}}\\
-(a)&(b)&(c)
-\end{tabular}
-\caption{It is often a good idea for the first figure to attempt to
-encapsulate the article, complementing the abstract.  This figure illustrates
-the various print and on-screen layouts for which this paper format has
-been optimised: (a) traditional BMVC print format; (b) on-screen
-single-column format, or large-print paper; (c) full-screen two column, or
-2-up printing. }
-\label{fig:teaser}
-\end{figure}
 
 \subsection{Citations}
 When citing a multi-author paper, you may save space by using ``{\em et
