@@ -213,23 +213,7 @@ While the raw disparity map encodes spatial anomaly information, feeding it dire
 
 \textbf{Feature extraction.} Features are derived from the disparity map to capture both global reconstruction error magnitude and local spatial structure. These include global statistics (mean, standard deviation, maximum, and upper percentile values of $D$), spatial concentration metrics (the proportion of pixels exceeding an error threshold), histogram based distribution descriptors, and regional block statistics capturing localized error patterns that may correspond to small threat objects. The resulting feature vector compactly summarizes the anomaly signal in a form suitable for classical machine learning, while preserving interpretability and robustness under limited labeled data.
 
-\textbf{Classifier selection.} The extracted features are used to train a Random Forest classifier, selected following empirical comparison against Extreme Gradient Boosting (XGBoost) and Logistic Regression on the same feature set. As shown in the table, the Random Forest achieved the highest performance across all metrics, reaching an accuracy of 0.82–0.99, an F1 score of 0.42–0.62, and a ROC-AUC of 0.85–0.92. Its robustness to feature scale heterogeneity, native handling of class imbalance through class weight adjustment, and strong generalization under limited anomaly labels make it well suited to this setting. The ensemble comprises 200 decision trees, with class weights set inversely proportional to class frequency to compensate for the severe imbalance between normal and anomalous samples in the SIXray dataset.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{|l|c|c|c|}
-\hline
-Model & Accuracy & F1 & ROC-AUC \\
-\hline\hline
-Random Forest & 0.82 -- 0.99 & 0.42 -- 0.62 & 0.85 -- 0.92 \\
-Extreme Gradient Boosting & 0.74 -- 0.84 & 0.32 -- 0.44 & 0.76 -- 0.79 \\
-Logistic Regression & 0.81 -- 0.87 & 0.30 -- 0.40 & 0.90 -- 0.91 \\
-\hline
-\end{tabular}
-\end{center}
-\caption{Classification performance comparison across different models.}
-\label{tab:results}
-\end{table}
+\textbf{Classifier selection.} The disparity map features are used to train a Random Forest classifier. Random Forests are well suited to this setting for three reasons: the feature vectors are low-dimensional, making deep classifiers unnecessary; the ensemble's bootstrap aggregation provides robustness to the feature scale heterogeneity inherent in mixed statistical descriptors; and class imbalance can be directly addressed by setting tree-level class weights inversely proportional to class frequency, without requiring oversampling or data augmentation. The ensemble comprises 200 decision trees, with class weights calibrated to compensate for the severe imbalance between normal and anomalous samples in the SIXray dataset.
 
 \subsection{Patch Wise Localization via Connected Component Analysis}
 
@@ -277,12 +261,135 @@ The hyperparameters $T$, $min\_size$, and $max\_size$ are each tuned independent
 Three principles guided the framework's design:
 
 \begin{itemize}
-    \item \textbf{Label efficiency:} The CAE requires no anomaly annotations during training, and the RF classifier requires only image-level labels rather than pixel-wise segmentation masks.
+    \item \textbf{Label efficiency:} The CAE requires no anomaly annotations during training, and the RF classifier requires only image level labels rather than pixel wise segmentation masks.
     
     \item \textbf{Modularity:} The classification and localization stages are decoupled and can be updated independently. For instance, the RF could be replaced with a neural classifier as labeled data accumulates, without retraining the CAE.
     
-    \item \textbf{Computational practicality:} Both the feature extraction and Random Forest inference are lightweight, and the CAE architecture is kept shallow enough for deployment in time-constrained security screening environments without GPU dependency at inference time.
+    \item \textbf{Computational practicality:} Both the feature extraction and Random Forest inference are lightweight, and the CAE architecture is kept shallow enough for deployment in time constrained security screening environments without GPU dependency at inference time.
 \end{itemize}
+
+\section{Experiments}
+
+\subsection{Dataset and Experimental Setup}
+
+All experiments were conducted on the SIXray dataset, a large scale benchmark for X-ray baggage inspection that contains over 1,059,231 images across six categories: gun, knife, wrench, pliers, scissors, and a normal class. The dataset is characterised by a highly imbalanced class distribution, with anomalous images constituting a small fraction of the total, which closely mirrors real world security screening conditions.
+
+\textbf{Autoencoder training.} Because the reconstruction based anomaly detection paradigm assumes the model learns an exclusive representation of normality, only normal (non threat) images were used during autoencoder training. Exposing the model to anomalous samples during training would undermine its ability to produce elevated reconstruction error on unseen threats, as the network would learn to reconstruct both normal and anomalous structures. The normal subset was split 80:20 for training and validation, respectively, with the validation split used exclusively for monitoring reconstruction loss and selecting model checkpoints.
+
+\textbf{Classification training.} To construct a labelled dataset for the downstream classification stage, normal and anomalous images were sampled at a 10:1 ratio, reflecting the natural scarcity of threat items in operational settings and deliberately preserving the class imbalance challenge. This combined set was partitioned using a 70:20:10 stratified split for training, validation, and testing, respectively, ensuring proportional representation of both classes across all splits.
+
+\textbf{Implementation details.} All models were implemented in TensorFlow. Images were resized to 224×224 pixels for the first stage classification pipeline, and upscaled to 2240×2240 for the patch wise localization stage to preserve fine grained spatial detail. Training was performed on an NVIDIA GPU with a batch size of 32 and the Adam optimiser. The composite loss function used for autoencoder training is defined as:
+
+\[
+\mathcal{L}_s = \alpha_1 \mathcal{L}_f + \alpha_2 \mathcal{L}_2
+\]
+
+where $\mathcal{L}_f$ is a perceptual feature loss computed in VGG feature space and $\mathcal{L}_2$ is the pixel wise mean squared error. Both loss weights ($\alpha_1$, $\alpha_2$) were set to $1.0$ following a grid search over $\{0.1,\,0.5,\,1.0,\,2.0\}$.
+
+\subsection{Autoencoder Architecture Comparison}
+
+To identify the optimal reconstruction backbone for anomaly detection, six architectures were evaluated under identical training conditions: a standard convolutional autoencoder (AE), a Masked Autoencoder (MAE), a Vision Transformer Autoencoder (ViT-AE), a Variational Autoencoder (VAE), and the GAN-based reconstruction models GANomaly, Skip-GANomaly, and Dense-GANomaly. The GAN based variants were included as baselines given their established use in X-ray anomaly detection literature.
+
+Reconstruction quality was assessed using two complementary metrics: Peak Signal to Noise Ratio (PSNR), which measures pixel level fidelity, and Structural Similarity Index (SSIM), which captures perceptual similarity in terms of luminance, contrast, and structure. Anomaly discriminability was separately quantified using Mean Absolute Error (MAE) and Mean Squared Error (MSE) of the reconstruction, computed over the held out test set containing both normal and anomalous images. A well suited backbone should produce low reconstruction error on normal images (indicating faithful reconstruction of learned patterns) and high error on anomalous images (indicating failure to reconstruct unseen threat structures).
+
+\begin{figure*}[t]
+\centering
+
+\includegraphics[width=0.9\linewidth]{images/model-performance.png}
+
+\vspace{0.5em}
+
+\includegraphics[width=0.9\linewidth]{images/reconstruction-errors.png}
+
+\caption{Encoder-Decoder performance comparison across different models}
+\label{fig:enc-dec experiments}
+\end{figure*}
+
+All architectures were trained for 100 epochs with early stopping based on validation loss, with the best checkpoint selected for evaluation.
+
+\subsection{Classification Model Selection}
+
+Disparity maps produced by the selected autoencoder are, in themselves, spatial residual images rather than classification ready signals. To convert these into image level anomaly predictions, a feature extraction step was applied: statistical descriptors including the mean, standard deviation, maximum value, and histogram based features were extracted from each disparity map, forming a compact fixed length feature vector per image.
+
+Three classical machine learning classifiers were trained and evaluated on these feature vectors: Random Forest (RF), Extreme Gradient Boosting (XGBoost), and Logistic Regression (LR). Classical classifiers were preferred over end to end deep classifiers here because the feature vectors are low dimensional (removing the need for deep capacity), the training set is small and imbalanced (where tree based ensembles and linear models are more robust than overparameterised networks), and the resulting pipeline remains computationally lightweight and interpretable.
+
+\begin{table}
+\begin{center}
+\begin{tabular}{|l|c|c|c|}
+\hline
+Model & Accuracy & F1 & ROC-AUC \\
+\hline\hline
+Random Forest & 0.82 -- 0.99 & 0.42 -- 0.62 & 0.85 -- 0.92 \\
+Extreme Gradient Boosting & 0.74 -- 0.84 & 0.32 -- 0.44 & 0.76 -- 0.79 \\
+Logistic Regression & 0.81 -- 0.87 & 0.30 -- 0.40 & 0.90 -- 0.91 \\
+\hline
+\end{tabular}
+\end{center}
+\caption{Classification performance comparison across different models.}
+\label{tab:results}
+\end{table}
+
+Each classifier was trained on the 70\% training split, tuned on the 20\% validation split, and evaluated on the held out 10\% test split. Performance was measured using Accuracy, F1 Score, and ROC-AUC. F1 was included alongside accuracy given the 10:1 class imbalance, where accuracy alone can be misleading. ROC-AUC was used to assess ranking ability independent of any particular classification threshold.
+
+\subsection{Localization Strategy Comparison}
+
+Once an image is classified as anomalous, the localization stage is triggered. Three spatial anomaly localization strategies were compared to identify the most effective approach for generating precise bounding box predictions:
+
+\textbf{Connected Component Analysis (CCA).} The disparity map is thresholded to produce a binary mask, and connected components are extracted. Components are filtered by size and used directly to form padded bounding boxes.
+
+\textbf{DBSCAN Clustering.} The coordinates of high disparity pixels are treated as a point cloud and clustered using DBSCAN, with bounding boxes formed around each identified cluster.
+
+\textbf{HDBSCAN Clustering.} A hierarchical variant of DBSCAN that automatically determines the number of clusters and is more robust to varying density, applied to the same high disparity pixel coordinates.
+
+\begin{figure*}[t]
+\centering
+
+\includegraphics[width=0.9\linewidth]{images/loc_sel.png}
+
+\caption{Localization performance comparison across different models}
+\label{fig:localization performance}
+\end{figure*}
+
+All three strategies were applied identically on the same disparity maps produced by the selected autoencoder. Localization performance was evaluated using mean Average Precision at IoU threshold 0.3 (mAP@0.3) and Mean IoU, following conventions established in weakly supervised object detection literature and consistent with prior work on the SIXray dataset.
+
+\subsection{Hyperparameter Optimization for Connected Component Analysis}
+
+Given that Connected Component Analysis was identified as the superior localization strategy, its three governing hyperparameters were systematically optimised: the binarization threshold $T$, the minimum component size, and the maximum component area ratio.
+
+\textbf{Binarization threshold $T$.} The threshold determines which pixels of the disparity map are considered anomalous. A sweep was conducted over $T \in \{65,68,70,72,75,78,80,82,85\}$, with localization accuracy (IoU $\geq 0.3$) recorded at each value. Thresholds that are too low admit large amounts of background noise into the binary mask, producing spurious components; thresholds that are too high suppress genuine anomaly signal in regions of moderate disparity.
+
+\begin{figure*}[t]
+\centering
+
+\includegraphics[width=0.9\linewidth]{images/threshold.png}
+
+\caption{Threshold values experimentation}
+\label{fig:threshold experiments}
+\end{figure*}
+
+\textbf{Minimum component size.} A minimum pixel count filter removes small connected components that are likely noise rather than true threat regions. The minimum size was swept over the range $\{8,10,12,15,18,20,25,30,40,50,60,70,80,90,100,110,120\}$ pixels.
+
+\begin{figure*}[t]
+\centering
+
+\includegraphics[width=0.9\linewidth]{images/min_size.png}
+
+\caption{Minimum pixel count filter experimentation}
+\label{fig:min size experiments}
+\end{figure*}
+
+\textbf{Maximum area ratio.} An upper bound on the fraction of the image area that any single component may occupy prevents the entire disparity map from being flagged as a single diffuse anomaly region, a common failure mode when the reconstruction error is distributed globally rather than locally. This ratio was swept over $\{0.25,0.30,0.35,0.40,0.45,0.50,0.55,0.60,0.75,0.90\}$.
+
+\begin{figure*}[t]
+\centering
+
+\includegraphics[width=0.9\linewidth]{images/max_area.png}
+
+\caption{Maximum area ratio experimentation}
+\label{fig:max area experiments}
+\end{figure*}
+
+Each hyperparameter was optimised independently, holding the others at their previously determined optimal values, using a sequential grid search. Final values were selected based on peak localization accuracy on the validation set.
 
 \section{Template}
 
