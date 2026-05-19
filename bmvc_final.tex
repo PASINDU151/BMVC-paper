@@ -391,6 +391,55 @@ Given that Connected Component Analysis was identified as the superior localizat
 
 Each hyperparameter was optimised independently, holding the others at their previously determined optimal values, using a sequential grid search. Final values were selected based on peak localization accuracy on the validation set.
 
+\clearpage 
+\section{Conclusion}
+\label{sec:conclusion}
+This paper presented a Two-Stage Reconstruction-Guided Hybrid Framework for 
+unsupervised anomaly detection and localization in baggage X-ray security screening. 
+By training a Convolutional Autoencoder exclusively on normal baggage images, the 
+proposed system avoids the annotation bottleneck that limits supervised approaches, 
+while retaining discriminative power through a Random Forest classifier trained on 
+features derived from the pixel-wise disparity map. The patch-wise reconstruction 
+strategy in the second stage, combined with connected component analysis, provides 
+fine-grained spatial localization of anomalous regions without requiring any 
+ground-truth defect annotations at training time.
+
+Experiments on the SIXray benchmark demonstrate that the proposed framework achieves 
+a Detection ROC-AUC of 0.916 and a detection accuracy of 99.4\%, outperforming 
+established adversarial baselines including GANomaly, Skip-GANomaly, and 
+Dense-GANomaly. More significantly, the framework extends beyond image-level 
+detection to provide actionable spatial output, achieving a localization accuracy 
+of 0.908 at IoU $\geq$ 0.30 and a mean IoU of 0.502 - a capability that prior 
+reconstruction-based methods do not report, and one that is essential for practical 
+deployment in operator-assisted screening workflows.
+
+These results support two broader conclusions. First, the combination of unsupervised 
+representation learning with lightweight supervised classification represents a 
+pragmatically effective design point: it sidesteps the data collection challenges 
+of fully supervised systems while avoiding the instability and computational overhead 
+of adversarial training. Second, simple, interpretable localization pipelines based 
+on thresholded disparity masks and connected component analysis can achieve 
+competitive spatial precision without the complexity of attention-based or 
+segmentation-based alternatives.
+
+\noindent \textbf{Limitations and Future Work.} The current framework operates on 
+2D single-view X-ray images, and reconstruction quality degrades in regions of heavy 
+occlusion where multiple dense objects overlap. Future work will explore multi-view 
+fusion and 3D Computed Tomography (CT) data to resolve ambiguities that are 
+fundamentally irrecoverable from a single projection. Additionally, the fixed 
+threshold applied during disparity map binarization is sensitive to image-level 
+brightness variation; adaptive thresholding strategies or learned threshold 
+predictors trained on reconstruction confidence will be investigated to improve 
+robustness. Finally, integrating Continual Learning mechanisms to update the 
+autoencoder's representation of ``normal'' content dynamically, without full 
+retraining, will be essential for adapting to evolving travel trends and 
+seasonal luggage variation in live deployment settings.
+
+
+
+
+
+
 \section{Template}
 
 \subsection{Paper length}
