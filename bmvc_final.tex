@@ -170,7 +170,7 @@ The proposed framework addresses automated baggage threat detection through a tw
 \begin{figure*}[t]
 \centering
 
-\includegraphics[width=0.9\linewidth]{images/encoder.png}
+\includegraphics[width=0.7\linewidth]{images/encoder.png}
 
 \caption{Two stage pipeline}
 \label{fig:two-stage-pipeline}
@@ -184,10 +184,10 @@ The foundation of both stages is a convolutional autoencoder trained solely on n
 
 \textbf{Architecture.} The encoder consists of four convolutional blocks, each comprising a $3\times3$ convolution, batch normalization, and ReLU activation, followed by $2\times2$ max pooling to downsample the spatial resolution. Filter depth increases progressively ($32 \to 64 \to 128 \to 256$), enabling the network to capture increasingly abstract representations of normal baggage structure at each scale. The bottleneck produces a compact latent vector encoding the essential structure of the input. The decoder mirrors the encoder symmetrically, using transposed convolutions to progressively upsample back to the original resolution of $224\times224$, with a final sigmoid activation to constrain pixel values to $[0,1]$.
 
-\begin{figure*}[t]
+\begin{figure*}[h]
 \centering
 
-\includegraphics[width=0.9\linewidth]{images/enc-dec.png}
+\includegraphics[width=0.7\linewidth]{images/enc-dec.png}
 
 \caption{Autoencoder training}
 \label{fig:autoencoder}
@@ -313,14 +313,14 @@ To identify the optimal reconstruction backbone for anomaly detection, six archi
 
 Reconstruction quality was assessed using two complementary metrics: Peak Signal to Noise Ratio (PSNR), which measures pixel level fidelity, and Structural Similarity Index (SSIM), which captures perceptual similarity in terms of luminance, contrast, and structure. Anomaly discriminability was separately quantified using Mean Absolute Error (MAE) and Mean Squared Error (MSE) of the reconstruction, computed over the held out test set containing both normal and anomalous images. A well suited backbone should produce low reconstruction error on normal images (indicating faithful reconstruction of learned patterns) and high error on anomalous images (indicating failure to reconstruct unseen threat structures).
 
-\begin{figure*}[t]
+\begin{figure*}[h]
 \centering
 
-\includegraphics[width=0.9\linewidth]{images/model-performance.png}
+\includegraphics[width=0.7\linewidth]{images/model-performance.png}
 
 \vspace{0.5em}
 
-\includegraphics[width=0.9\linewidth]{images/reconstruction-errors.png}
+\includegraphics[width=0.7\linewidth]{images/reconstruction-errors.png}
 
 \caption{Encoder-Decoder performance comparison across different models}
 \label{fig:enc-dec experiments}
@@ -362,10 +362,10 @@ Once an image is classified as anomalous, the localization stage is triggered. T
 
 \textbf{HDBSCAN Clustering.} A hierarchical variant of DBSCAN that automatically determines the number of clusters and is more robust to varying density, applied to the same high disparity pixel coordinates.
 
-\begin{figure*}[t]
+\begin{figure*}[h]
 \centering
 
-\includegraphics[width=0.9\linewidth]{images/loc_sel.png}
+\includegraphics[width=0.7\linewidth]{images/loc_sel.png}
 
 \caption{Localization performance comparison across different models}
 \label{fig:localization performance}
@@ -379,36 +379,31 @@ Given that Connected Component Analysis was identified as the superior localizat
 
 \textbf{Binarization threshold $T$.} The threshold determines which pixels of the disparity map are considered anomalous. A sweep was conducted over $T \in \{65,68,70,72,75,78,80,82,85\}$, with localization accuracy (IoU $\geq 0.3$) recorded at each value. Thresholds that are too low admit large amounts of background noise into the binary mask, producing spurious components; thresholds that are too high suppress genuine anomaly signal in regions of moderate disparity.
 
-\begin{figure*}[t]
-\centering
-
-\includegraphics[width=0.9\linewidth]{images/threshold.png}
-
-\caption{Threshold values experimentation}
-\label{fig:threshold experiments}
-\end{figure*}
-
 \textbf{Minimum component size.} A minimum pixel count filter removes small connected components that are likely noise rather than true threat regions. The minimum size was swept over the range $\{8,10,12,15,18,20,25,30,40,50,60,70,80,90,100,110,120\}$ pixels.
-
-\begin{figure*}[t]
-\centering
-
-\includegraphics[width=0.9\linewidth]{images/min_size.png}
-
-\caption{Minimum pixel count filter experimentation}
-\label{fig:min size experiments}
-\end{figure*}
 
 \textbf{Maximum area ratio.} An upper bound on the fraction of the image area that any single component may occupy prevents the entire disparity map from being flagged as a single diffuse anomaly region, a common failure mode when the reconstruction error is distributed globally rather than locally. This ratio was swept over $\{0.25,0.30,0.35,0.40,0.45,0.50,0.55,0.60,0.75,0.90\}$.
 
-\begin{figure*}[t]
+\begin{figure}[H]
 \centering
-
-\includegraphics[width=0.9\linewidth]{images/max_area.png}
-
-\caption{Maximum area ratio experimentation}
-\label{fig:max area experiments}
-\end{figure*}
+\begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/threshold.png}
+    \small (a) Threshold
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/min_size.png}
+    \small (b) Min pixel count
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/max_area.png}
+    \small (c) Max area ratio
+\end{minipage}
+\caption{Parameter experimentation results}
+\end{figure}
 
 Each hyperparameter was optimised independently, holding the others at their previously determined optimal values, using a sequential grid search. Final values were selected based on peak localization accuracy on the validation set.
 
@@ -425,22 +420,24 @@ Table~\ref{tab:comparison_results} compares the proposed framework with several 
 In contrast, the proposed framework combines reconstruction-based anomaly learning with spatial localization analysis, enabling both accurate anomaly detection and precise localization of suspicious regions.
 
 \begin{table}[H]
-\centering
-\caption{Comparison of the proposed framework with existing approaches on SIXray.}
-\label{tab:comparison_results}
-\begin{tabular}{lcccc}
-\toprule
-Method & Detection AUC & Accuracy (\%) & Localization Accuracy & Mean IoU \\
-\midrule
-GANomaly \cite{akcay2018ganomaly} & 0.75 -- 0.80 & 85 -- 90 & N/A & N/A \\
-Skip-GANomaly \cite{akcay2019skip} & 0.90 -- 0.95 & 90 -- 95 & N/A & N/A \\
-Dense-GANomaly \cite{denseganomaly2020} & 0.92 -- 0.98 & 92 -- 96 & N/A & N/A \\
-Patch SVDD \cite{yi2020patchsvdd} & 0.89 & 91.2 & 0.71 & 0.39 \\
-PaDiM \cite{defard2020padim} & 0.91 & 93.4 & 0.78 & 0.44 \\
-Unsupervised Anomaly Instance Segmentation \cite{hassan2021unsupervised} & 0.90 & 95.1 & 0.794 & 0.46 \\
-Proposed Method & 0.916 & 99.4 & 0.908 & 0.502 \\
-\bottomrule
-\end{tabular}
+	\centering
+	\caption{Comparison of the proposed framework with existing approaches on SIXray.}
+	\label{tab:comparison_results}
+	\resizebox{\columnwidth}{!}{%
+		\begin{tabular}{lcccc}
+			\toprule
+			Method & Det. AUC & Accuracy (\%) & Loc. Acc. & Mean IoU \\
+			\midrule
+			GANomaly \cite{akcay2018ganomaly} & 0.75 -- 0.80 & 85 -- 90 & N/A & N/A \\
+			Skip-GANomaly \cite{akcay2019skip} & 0.90 -- 0.95 & 90 -- 95 & N/A & N/A \\
+			Dense-GANomaly \cite{denseganomaly2020} & 0.92 -- 0.98 & 92 -- 96 & N/A & N/A \\
+			Patch SVDD \cite{yi2020patchsvdd} & 0.89 & 91.2 & 0.71 & 0.39 \\
+			PaDiM \cite{defard2020padim} & 0.91 & 93.4 & 0.78 & 0.44 \\
+			UAI Segmentation \cite{hassan2021unsupervised} & 0.90 & 95.1 & 0.794 & 0.46 \\
+			\textbf{Proposed} & \textbf{0.916} & \textbf{99.4} & \textbf{0.908} & \textbf{0.502} \\
+			\bottomrule
+		\end{tabular}%
+	}
 \end{table}
 
 Qualitative results further demonstrated that the proposed framework accurately localized concealed threat objects despite heavy clutter and overlapping baggage contents. The RGB disparity maps generated by the patch-wise autoencoder successfully highlighted suspicious regions while suppressing normal baggage structures. Compared to grayscale reconstruction approaches used in previous studies, preserving RGB disparity information improved anomaly separability and reduced localization ambiguity.
@@ -448,8 +445,6 @@ Qualitative results further demonstrated that the proposed framework accurately 
 The connected component localization strategy also outperformed clustering-based approaches such as DBSCAN and HDBSCAN by producing spatially consistent bounding boxes with fewer fragmented detections. The patch-wise reconstruction mechanism enabled fine-grained localization of small concealed objects, which is particularly important in real-world baggage security screening applications where threat items may occupy only a small region of the X-ray scan.
 
 Overall, the results demonstrate that the proposed framework provides an effective and scalable solution for unsupervised baggage threat detection and localization without requiring large annotated datasets. The combination of reconstruction-based learning, RGB disparity analysis, and connected component localization enables strong generalization capability while maintaining high detection and localization performance on the SIXray dataset.
-
-\clearpage
 
 \section{Conclusion}
 \label{sec:conclusion}
