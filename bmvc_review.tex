@@ -3,7 +3,12 @@
 %% Enter your paper number here for the review copy
 \bmvcreviewcopy{??}
 
-\title{Author Guidelines for the\\ British Machine Vision Conference}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{float}
+\usepackage{booktabs}
+
+\title{Two-Stage Reconstruction-Guided Hybrid Framework for Baggage X-Ray Anomaly Detection and Localization}
 
 % Enter the paper's authors in order
 % \addauthor{Name}{email/homepage}{INSTITUTION_CODE}
@@ -14,17 +19,12 @@
 % Enter the institutions
 % \addinstitution{Name\\Address}
 \addinstitution{
- The Vision Institute\\
- University of Borsetshire\\
- Wimbleham, UK
-}
-\addinstitution{
- Collaborators, Inc.\\
- 123 Park Avenue,\\
- New York, USA
+ Department of Computer Science and Engineering\\
+ University of Moratuwa\\
+ Sri Lanka
 }
 
-\runninghead{Student, Prof, Collaborator}{BMVC Author Guidelines}
+\runninghead{Student, Prof, Collaborator}{X-Ray Anomaly Detection}
 
 % Any macro definitions you would like to include
 % These are not defined in the style file, because they don't begin
@@ -42,295 +42,453 @@
 \maketitle
 
 \begin{abstract}
-This document demonstrates the format requirements for papers submitted
-to the British Machine Vision Conference.  The format is designed for
-easy on-screen reading, and to print well at one or two pages per sheet.
-Additional features include: pop-up annotations for
-citations~\cite{Authors06,Mermin89}; a margin ruler for reviewing; and a
-greatly simplified way of entering multiple authors and institutions.
-
-{\bf All authors are encouraged to read this document}, even if you have
-written many papers before.  As well as a description of the format, the
-document contains many instructions relating to formatting problems and
-errors that are common even in the work of authors who {\em have}
-written many papers before.
+	Automated baggage screening in security-critical environments faces persistent challenges 
+	including extreme class imbalance, limited availability of labeled anomaly samples, and 
+	the inherent difficulty of detecting small, heavily occluded threat objects within 
+	cluttered X-ray imagery. While supervised deep learning approaches achieve strong 
+	detection accuracy, they depend on extensive annotated datasets and frequently fail to 
+	generalize to novel or unseen threat types. We propose a \textbf{Two-Stage 
+		Reconstruction-Guided Hybrid Framework} that combines unsupervised representation 
+	learning with lightweight supervised classification for both anomaly detection and 
+	spatial localization. In the first stage, a Convolutional Autoencoder (CAE) is trained 
+	exclusively on normal baggage images; the resulting pixel-wise reconstruction error 
+	, the disparity map serves as the primary anomaly signal, from which 
+	discriminative features are extracted to train a Random Forest classifier for 
+	image-level detection. In the second stage, a patch-wise reconstruction strategy 
+	enables fine-grained spatial analysis, with connected component analysis applied to 
+	the thresholded disparity mask to identify and refine anomalous regions as padded 
+	bounding boxes. Evaluated on the large-scale SIXray benchmark, the proposed framework 
+	achieves a Detection ROC-AUC of 0.916, a detection accuracy of 99.4\%, and a 
+	localization accuracy of 0.908 at IoU $\geq$ 0.30, outperforming GANomaly, 
+	Skip-GANomaly, and Dense-GANomaly baselines while remaining computationally efficient 
+	for real-world deployment.
 \end{abstract}
 
 %-------------------------------------------------------------------------
 \section{Introduction}
 \label{sec:intro}
-From 2009, the proceedings of BMVC (the British Machine Vision
-Conference) will be published only in electronic form.  This document
-illustrates the required paper format, and includes guidelines on
-preparation of submissions.  Papers which fail to adhere to these
-requirements may be rejected at any stage in the review process.
 
-\LaTeX\ users should use this template in order to prepare their paper.
-Users of other packages should emulate the style and layout of this
-example.  Note that best results will be achieved using {\tt pdflatex},
-which is available in most modern distributions.
+The security of modern transportation infrastructure depends on the reliable detection 
+of prohibited items within passenger baggage. X-ray screening remains the primary 
+non-intrusive mechanism for this task, enabling inspection of opaque containers without 
+physical search~\cite{tackling2016jaccard}. However, the scale of modern transit operations has 
+made purely manual interpretation untenable: security operators must analyze thousands 
+of cluttered, noisy images per shift under sustained cognitive load, and their attention 
+degrades accordingly~\cite{baggage2022abdelfatah}. Transitioning to Automated Threat Recognition 
+(ATR) systems has therefore become an operational imperative.
 
-\subsection{Paper length}
-Papers for phase-one review must be 14~pages in length, {\bf only} {\em excluding} the bibliography.
-References and any appendices are unlimited.
+The dominant paradigm in the literature applies supervised deep learning to this 
+problem, adapting established object detection architectures such as YOLO and Faster 
+R-CNN to the X-ray domain~\cite{efficient2024yan}. These approaches have demonstrated high 
+detection rates for specific known threat categories. However, they are fundamentally 
+constrained by two interlocking problems. First, the class imbalance in operational 
+environments is extreme: prohibited items appear in a vanishingly small fraction of 
+scans~\cite{sixray2019lingxi}, causing supervised models to bias heavily towards the majority 
+(benign) class and produce unacceptably high false-negative rates on rare threats. 
+Second, supervised models operate under a \textit{closed-set} assumption, meaning they 
+can only detect threat types present in their training data. Novel improvised devices, non-metallic 3D-printed firearms, liquid explosives, or concealed components fall outside predefined categories and are effectively invisible to such 
+systems~\cite{baggage2022abdelfatah}. Acquiring large, balanced, and annotated datasets of real 
+prohibited items is additionally expensive and logistically dangerous.
+
+Unsupervised Anomaly Detection (UAD) offers a compelling alternative by reframing 
+the problem: rather than recognizing specific threats, the system learns what 
+\textit{normal} baggage looks like and flags statistical deviations for human review. 
+Reconstruction-based methods, notably GANomaly~\cite{anomalib2022akcay} and 
+Skip-GANomaly~\cite{anomalib2022akcay}, exploit the intuition that an autoencoder trained 
+exclusively on normal images will fail to faithfully reconstruct anomalous content, 
+producing an elevated reconstruction error at the location of the threat. While this 
+approach is theoretically well-motivated, existing adversarial reconstruction methods 
+carry significant computational overhead and, critically, none provide a principled 
+mechanism for precise spatial localization of detected anomalies within the image, 
+a capability that is essential for guiding operator attention in practice.
+
+In this paper, we address these limitations with a \textbf{Two-Stage 
+	Reconstruction-Guided Hybrid Framework} designed for both accurate image-level 
+detection and fine-grained anomaly localization on X-ray security imagery. 
+Our contributions are as follows:
+
+\begin{enumerate}
+	\item \textbf{Reconstruction-Driven Feature Extraction for Classification.} We 
+	train a Convolutional Autoencoder solely on normal baggage images and derive a 
+	pixel-wise disparity map as the primary anomaly signal. Statistical features 
+	extracted from this map are used to train a Random Forest classifier, combining 
+	the generalization of unsupervised representation learning with the 
+	discriminative power of a supervised classifier, without requiring annotated 
+	anomaly samples at training time.
+	
+	\item \textbf{Patch-Wise Localization via Connected Component Analysis.} When 
+	an anomaly is detected at the image level, a patch-wise reconstruction strategy 
+	applies the autoencoder at fine spatial granularity. A threshold is applied to 
+	the resulting disparity mask to produce a binary anomaly map, from which 
+	connected components are extracted, size-filtered, and padded to form 
+	bounding box predictions.
+	
+	\item \textbf{Comprehensive Evaluation on SIXray.} We benchmark against 
+	GANomaly, Skip-GANomaly, and Dense-GANomaly on the SIXray dataset~\cite{sixray2019lingxi}, 
+	demonstrating that our framework achieves superior detection accuracy (99.4\%) 
+	and ROC-AUC (0.916), while additionally providing localization performance 
+	(IoU $\geq$ 0.30 accuracy of 0.908) that prior baselines do not report.
+\end{enumerate}
+
+% The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews 
+% related work in classical, supervised, and unsupervised X-ray threat detection. 
+% Section~\ref{sec:method} details the proposed two-stage architecture and its loss 
+% formulation. Section~\ref{sec:experiments} describes the experimental setup, datasets, 
+% and evaluation metrics. Section~\ref{sec:results} presents quantitative and qualitative 
+% results, and Section~\ref{sec:conclusion} concludes with directions for future work.
+
+\section{Related Work}
+
+Automatic threat detection in baggage X-ray imagery has become an active area of research due to the increasing demand for efficient and reliable security screening systems in airports, transportation hubs, and public facilities. Earlier baggage threat detection methods mainly relied on handcrafted feature extraction techniques such as SIFT, SURF, FAST-SURF, Bag-of-Words (BoW), and Support Vector Machines (SVMs) \cite{bastan2011,riffo2015,mery2016,kundegorski2016}. Although these methods achieved reasonable performance in controlled environments, they suffered from poor generalization capability under severe object overlap, cluttered baggage contents, and varying scanner properties.
+
+The emergence of deep learning significantly improved the performance of baggage threat detection systems. Supervised deep learning approaches employed convolutional neural networks for classification, detection, and segmentation of prohibited items in X-ray scans. Akcay et al. \cite{akcay2016} introduced transfer learning using GoogLeNet for baggage threat classification, while Jaccard et al. \cite{jaccard2017} utilized VGG-19 for suspicious object recognition. Subsequently, one-stage and two-stage object detectors such as Faster R-CNN, RetinaNet, and Mask R-CNN were adapted for X-ray imagery \cite{liu2018,gaus2019a,gaus2019b}. To address severe class imbalance in the SIXray dataset, Miao et al. \cite{miao2019sixray} proposed the Class-Balanced Hierarchical Refinement (CHR) framework. Similarly, Hassan et al. proposed contour-driven object detectors including Cascaded Structure Tensors (CST) and Dual Tensor-Shot Detector (DTSD) for heavily occluded baggage threat detection \cite{hassan2020cst,hassan2020dtsd}. Wei et al. \cite{wei2020doam} further introduced the De-Occlusion Attention Module (DOAM) to improve localization performance under severe overlap conditions.
+
+Despite their strong detection performance, supervised approaches require large-scale annotated datasets with bounding boxes or segmentation masks. However, collecting and annotating prohibited items in X-ray imagery is expensive, time-consuming, and often impractical due to the rarity of threat samples. Furthermore, supervised models often require retraining or fine-tuning when new threat categories or scanner configurations are introduced \cite{gaus2019a}.
+
+To reduce annotation dependency, researchers explored semi-supervised and unsupervised anomaly detection approaches. One of the earliest and most influential frameworks was AnoGAN \cite{schlegl2017anogan}, which utilized Generative Adversarial Networks (GANs) trained only on normal images. AnoGAN assumed that anomalies could be identified through reconstruction errors between the original image and generated samples. However, AnoGAN required expensive iterative latent space optimization during inference, resulting in slow test-time performance. To overcome this limitation, BiGAN \cite{donahue2016bigan} and EGBAD \cite{zenati2018egbad} introduced encoder networks to directly map images into latent representations. GANomaly \cite{akcay2018ganomaly} further improved anomaly detection by combining GANs with encoder-decoder architectures, significantly reducing inference complexity. Skip-GANomaly \cite{akcay2019skip} enhanced reconstruction quality by incorporating skip connections into the generator network.
+
+Although GAN-based methods demonstrated strong anomaly detection capability, they often suffered from unstable adversarial training and mode collapse problems. Consequently, reconstruction-based autoencoder methods gained popularity due to their simpler and more stable training process. Autoencoders trained exclusively on normal images reconstruct expected patterns while producing high reconstruction errors for anomalous regions \cite{bergmann2019mvtec}. Reconstruction disparity maps generated from the difference between original and reconstructed images became a popular approach for anomaly localization.
+
+Recent research has focused on patch-based anomaly detection frameworks to improve localization precision. Patch SVDD \cite{yi2020patchsvdd} introduced patch-level feature modeling for anomaly segmentation, while PaDiM \cite{defard2020padim} modeled multivariate Gaussian distributions of patch embeddings for localization. CutPaste \cite{li2021cutpaste} employed self-supervised synthetic anomalies to improve feature representation learning. More recently, Patch-wise Auto-Encoder for Visual Anomaly Detection \cite{patchae2023} proposed fine-grained patch reconstruction where each latent feature independently reconstructs spatially corresponding image regions. These methods demonstrated that patch-level reconstruction significantly improves anomaly localization performance.
+
+In the X-ray security domain, unsupervised anomaly localization remains relatively underexplored. Hassan et al. \cite{hassan2021unsupervised} proposed one of the first unsupervised anomaly instance segmentation frameworks for baggage threat recognition. Their method employed an encoder-decoder architecture trained on normal baggage scans and utilized reconstruction disparity maps combined with clustering and post-processing for anomaly localization. However, their framework primarily relied on grayscale reconstruction differences and clustering-based localization strategies.
+
+Motivated by these limitations, our work proposes an unsupervised reconstruction-based anomaly localization framework using patch-wise autoencoder reconstruction and RGB disparity map analysis. Unlike conventional grayscale reconstruction methods, the proposed framework preserves RGB disparity information to improve anomaly separability. Furthermore, connected component analysis is employed for robust localization of suspicious regions. The proposed approach is evaluated on the SIXray dataset and compared against clustering-based localization techniques such as DBSCAN and HDBSCAN.
 
 
-{\bf Papers which are
-clearly overlength will not be reviewed}.  This includes papers where the
-margins and formatting are deemed to have been significantly altered from
-those laid down by this style guide.
 
-The bibliography should begin immediately after the paper text.  It may
-be of any length, within reason.  It should {\em not} include
-annotations, figures, or any other paraphernalia intended to subvert the
-paper length requirement.
+\section{Proposed Method}
 
-\begin{figure}
-\begin{tabular}{ccc}
-\bmvaHangBox{\fbox{\parbox{2.7cm}{~\\[2.8mm]
-\rule{0pt}{1ex}\hspace{2.24mm}\includegraphics[width=2.33cm]{images/eg1_largeprint.png}\\[-0.1pt]}}}&
-\bmvaHangBox{\fbox{\includegraphics[width=2.8cm]{images/eg1_largeprint.png}}}&
-\bmvaHangBox{\fbox{\includegraphics[width=5.6cm]{images/eg1_2up.png}}}\\
-(a)&(b)&(c)
-\end{tabular}
-\caption{It is often a good idea for the first figure to attempt to
-encapsulate the article, complementing the abstract.  This figure illustrates
-the various print and on-screen layouts for which this paper format has
-been optimized: (a) traditional BMVC print format; (b) on-screen
-single-column format, or large-print paper; (c) full-screen two column, or
-2-up printing. }
-\label{fig:teaser}
+\subsection{Overview}
+
+The proposed framework addresses automated baggage threat detection through a two stage hybrid pipeline that combines unsupervised reconstruction based learning with supervised classification. The core insight is that a convolutional autoencoder (CAE) trained exclusively on normal X-ray images will reconstruct anomalous inputs poorly, producing elevated per pixel error in regions containing threat objects. This reconstruction error, captured as a disparity map, serves as the anomaly signal driving both image level detection and spatial localization.
+
+The framework is motivated by two practical realities of real world screening: first, anomalous baggage content is rare and costly to annotate, making purely supervised approaches brittle; second, operators require not just a detection flag but a spatial indicator pointing to the suspect region. The first stage feeds disparity map features into a classifier to produce an image level binary decision. If an anomaly is detected, the second stage triggers a patch wise reconstruction process, followed by connected component analysis, to localize and bound the threatening region within the image.
+
+\clearpage
+
+\begin{figure}[h]
+\centering
+
+\includegraphics[width=0.7\linewidth]{images/encoder.png}
+
+\caption{Two stage pipeline}
+\label{fig:two-stage-pipeline}
 \end{figure}
 
-\subsection{Dual submission}
-By submitting this manuscript to BMVC, the authors assert that it has not
-been previously published in substantially similar form, and no paper
-currently under submission to a conference contains significant overlap
-with this one.  If you are in doubt about the amount of overlap, cite the
-dual submission (as described below), and argue in the body of your paper
-why this is a nontrivial advance.  A simultaneous journal submission would
-be expected to have significant additional material not in the conference
-paper, and should not be previously published, nor in the final acceptance
-stages. The conference chairs reserve the right to cancel
-submission of any paper which is found to violate these conditions.  In
-particular, {\em uncited} dual submissions will be summarily dealt with.
+\subsection{Convolutional Autoencoder with Combined Loss}
 
-\subsection{Anonymity and blind review}
-BMVC operates a double-blind review process.  Your review submission {\bf
-must not identify you as the author}.  This means, in particular, that the
-author list should be replaced by the words ``BMVC {\em YYYY} Submission \#
-{\em NNN}'', where the italics are to indicate the year and the submission
-number.  The provided \LaTeX\ command \verb'\bmvcreviewcopy' does this
-automatically.  In addition, acknowledgements should not be included in the
-review copy.
+The foundation of both stages is a convolutional autoencoder trained solely on normal (threat free) X-ray images from the SIXray dataset. Because the model only learns to reconstruct the distribution of benign baggage content, it generalizes poorly to anomalous inputs, producing higher reconstruction error precisely where threats are present.
 
-Many authors misunderstand the concept of anonymizing for blind
-review.  Blind review {\bf does not mean that one must remove
-citations to one's own work}---in fact it is often impossible to
-review a paper unless the previous citations are known and
-available.
+\textbf{Architecture.} The encoder consists of four convolutional blocks, each comprising a $3\times3$ convolution, batch normalization, and ReLU activation, followed by $2\times2$ max pooling to downsample the spatial resolution. Filter depth increases progressively ($32 \to 64 \to 128 \to 256$), enabling the network to capture increasingly abstract representations of normal baggage structure at each scale. The bottleneck produces a compact latent vector encoding the essential structure of the input. The decoder mirrors the encoder symmetrically, using transposed convolutions to progressively upsample back to the original resolution of $224\times224$, with a final sigmoid activation to constrain pixel values to $[0,1]$.
 
-Blind review means that you do not use the words ``my'' or ``our''
-when citing previous work.  That is all.  (But see below for
-techreports)
+\begin{figure*}[h]
+\centering
 
-Saying ``this builds on the work of Lucy Smith [1]'' does not say
-that you are Lucy Smith, it says that you are building on her
-work.  If you are Smith and Jones, do not say ``as we show in
-[7]'', say ``as Smith and Jones show in [7]'' and at the end of the
-paper, include reference 7 as you would any other cited work.
+\includegraphics[width=0.7\linewidth]{images/enc-dec.png}
 
-An example of a bad paper:
-\begin{quote}
-\begin{center}
-    An analysis of the frobnicatable foo filter.
-\end{center}
-
-   In this paper we present a performance analysis of our
-   previous paper [1], and show it to be inferior to all
-   previously known methods.  Why the previous paper was
-   accepted without this analysis is beyond me.
-   [1] Removed for blind review
-\end{quote}
-
-
-An example of an excellent paper:
-
-\begin{quote}
-\begin{center}
-     An analysis of the frobnicatable foo filter.
-\end{center}
-
-   In this paper we present a performance analysis of the
-   paper of Smith \etal [1], and show it to be inferior to
-   all previously known methods.  Why the previous paper
-   was accepted without this analysis is beyond me.
-
-   [1] Smith, L and Jones, C. ``The frobnicatable foo
-   filter, a fundamental contribution to human knowledge''.
-   Nature 381(12), 1-213.
-\end{quote}
-
-If you are making a submission to another conference at the same time,
-which covers similar or overlapping material, you will almost certainly
-need to refer to that submission in order to explain the differences,
-just as you would if you or others had previously published related
-work.  In such cases, include the anonymized parallel
-submission~\cite{Authors06} as additional material and cite it as
-\begin{quote}
-[1] Authors. ``The frobnicatable foo filter'', ECCV 2006 Submission ID 324,
-Supplied as additional material {\tt eccv06.pdf}.
-\end{quote}
-
-Finally, you may feel you need to tell the reader that more details can be
-found elsewhere, and refer them to a technical report.  For conference
-submissions, the paper must stand on its own, and not {\em require} the
-reviewer to go to a techreport for further details.  Thus, you may say in
-the body of the paper ``further details may be found
-in~\cite{Authors06b}''.  Then submit the techreport as additional material.
-Again, you may not assume the reviewers will read this material.
-
-Sometimes your paper is about a problem which you tested using a tool which
-is widely known to be restricted to a single institution.  For example,
-let's say it's 1969, you have solved a key problem on the Apollo lander,
-and you believe that the ICLL'70 audience would like to hear about your
-solution.  The work is a development of your celebrated 1968 paper entitled
-``Zero-g frobnication: How being the only people in the world with access to
-the Apollo lander source code makes us a wow at parties'', by Zeus \etal.
-
-You can handle this paper like any other.  Don't write ``We show how to
-improve our previous work [Anonymous, 1968].  This time we tested the
-algorithm on a lunar lander [name of lander removed for blind review]''.
-That would be silly, and would immediately identify the authors. Instead
-write the following:
-\begin{quotation}
-\noindent
-   We describe a system for zero-g frobnication.  This
-   system is new because it handles the following cases:
-   A, B.  Previous systems [Zeus et al. 1968] didn't
-   handle case B properly.  Ours handles it by including
-   a foo term in the bar integral.
-
-   ...
-
-   The proposed system was integrated with the Apollo
-   lunar lander, and went all the way to the moon, don't
-   you know.  It displayed the following behaviours
-   which show how well we solved cases A and B: ...
-\end{quotation}
-As you can see, the above text follows standard scientific convention,
-reads better than the first version, and does not explicitly name you as
-the authors.  A reviewer might think it likely that the new paper was
-written by Zeus \etal, but cannot make any decision based on that guess.
-He or she would have to be sure that no other authors could have been
-contracted to solve problem B.
-
-FAQ: Are acknowledgements OK?  No.  Leave them for the final copy.
-
-\subsection{Citations}
-When citing a multi-author paper, you may save space by using ``{\em et
-alia}'', shortened to ``\etal'' (not ``{\em et.\ al.}'' as ``{\em et}'' is
-a complete word.)  The provided \verb'\etal' macro is a useful {\em aide
-memoire} in this regard.  However, use it only when there are three or more
-authors.  Thus, the following is correct: `` Frobnication has been trendy
-lately.  It was introduced by Alpher~\cite{Alpher02}, and subsequently
-developed by Alpher and Fotheringham-Smythe~\cite{Alpher03}, and Alpher
-\etal~\cite{Alpher04}.''
-
-This is incorrect: ``... subsequently developed by Alpher \etal~\cite{Alpher03} ...''
-because reference~\cite{Alpher03} has just two authors.  If you use the
-\verb'\etal' macro, then you need not worry about double periods
-when used at the end of a sentence as in Alpher \etal.
-
-%For this citation style, keep multiple citations in numerical (not
-%chronological) order, so prefer
-We use {\tt natbib}, so citations in random order are nicely sorted:
- \cite{Alpher03,Alpher02,Authors06b,Authors06}.  However, we don't use the
-compress option, as we want each reference to have its own hyperlink and
-popup window.
-
-%-------------------------------------------------------------------------
-\subsection{Footnotes}
-
-Please use footnotes\footnote {This is what a footnote looks like.  It
-often distracts the reader from the main flow of the argument.} sparingly.
-Indeed, try to avoid footnotes altogether and include necessary peripheral
-observations in
-the text (within parentheses, if you prefer, as in this sentence).  If you
-wish to use a footnote, place it at the bottom of the column on the page on
-which it is referenced. Use Times 8-point type, single-spaced.
-
-
-\begin{figure*}
-\begin{center}
-\fbox{\rule{0pt}{2in} \rule{.9\linewidth}{0pt}}
-\end{center}
-   \caption{Example of a short caption, which should be centered.}
-\label{fig:short}
+\caption{Autoencoder training}
+\label{fig:autoencoder}
 \end{figure*}
 
-%-------------------------------------------------------------------------
-\subsection{The ruler}
-The \LaTeX\ style defines a printed ruler which should be present in the
-version submitted for review.  The ruler is provided in order that
-reviewers may comment on particular lines in the paper without
-circumlocution.  If you are preparing a document using a non-\LaTeX\
-document preparation system, please arrange for an equivalent ruler to
-appear on the final output pages.  The presence or absence of the ruler
-should not change the appearance of any other content on the page.  The
-camera ready copy should not contain a ruler. (\LaTeX\ users may remove
-the \verb'[review]' option from the \verb'\documentclass' statement.)
-Reviewers: note that the ruler measurements do not align well with lines
-in the paper --- this turns out to be very difficult to do well when the
-paper contains many figures and equations, and, when done, looks ugly.
-Just use fractional references (e.g.\ this line is $210.5$), although in
-most cases one would expect that the approximate location ($210$ in the
-previous example) will be adequate.
+\textbf{Training objective.} A key design choice is the use of a combined loss function that jointly optimizes pixel level fidelity and perceptual feature similarity:
 
+\begin{equation}
+\mathcal{L}_s = \alpha_1 \mathcal{L}_f + \alpha_2 \mathcal{L}_2
+\end{equation}
+
+The first term, $\mathcal{L}_f$, is a feature level loss computed in the space of a pretrained feature extractor $f(\cdot)$, measuring the mean absolute difference between the feature representations of the original and reconstructed images across a batch of size $b_s$:
+
+\begin{equation}
+\mathcal{L}_f =
+\frac{1}{b_s}
+\sum_{i=1}^{b_s}
+\left| f(k_i) - f(k'_i) \right|
+\end{equation}
+
+The second term, $\mathcal{L}_2$, is a pixel wise mean squared error between the original image $k_i$ and its reconstruction $k'_i$:
+
+\begin{equation}
+\mathcal{L}_2 =
+\frac{1}{b_s}
+\sum_{i=1}^{b_s}
+\left| k_i - k'_i \right|^2
+\end{equation}
+
+The weighting coefficients $\alpha_1$ and $\alpha_2$ balance the contribution of each term. This combined loss is critical: $\mathcal{L}_2$ alone tends to produce blurry reconstructions that lose high frequency details, while $\mathcal{L}_f$ enforces structural and perceptual consistency. Together, they produce reconstructions that are faithful to normal imagery while remaining sensitive to subtle anomalous structures such as small metallic objects embedded in cluttered baggage.
+
+\textbf{Disparity Map Computation:}
+At inference time, for an input image $I$, the CAE produces a reconstruction $R$. The disparity map $D$ is computed as the per pixel absolute difference:
+
+\begin{equation}
+D(x,y) = \| I - R \|
+\end{equation}
+
+This map assigns high values to regions where the model's reconstruction deviates from the input, the spatial signature of anomalous content. It forms the input signal to both downstream stages.
+
+\subsection{Feature Extraction and Image Level Classification}
+
+While the raw disparity map encodes spatial anomaly information, feeding it directly to a classifier would be high dimensional and noisy. Instead, a compact set of statistical features is extracted from $D$ to produce a fixed length descriptor for downstream classification.
+
+\textbf{Feature extraction.} Features are derived from the disparity map to capture both global reconstruction error magnitude and local spatial structure. These include global statistics (mean, standard deviation, maximum, and upper percentile values of $D$), spatial concentration metrics (the proportion of pixels exceeding an error threshold), histogram based distribution descriptors, and regional block statistics capturing localized error patterns that may correspond to small threat objects. The resulting feature vector compactly summarizes the anomaly signal in a form suitable for classical machine learning, while preserving interpretability and robustness under limited labeled data.
+
+\textbf{Classifier selection.} The disparity map features are used to train a Random Forest classifier. Random Forests are well suited to this setting for three reasons: the feature vectors are low-dimensional, making deep classifiers unnecessary; the ensemble's bootstrap aggregation provides robustness to the feature scale heterogeneity inherent in mixed statistical descriptors; and class imbalance can be directly addressed by setting tree-level class weights inversely proportional to class frequency, without requiring oversampling or data augmentation. The ensemble comprises 200 decision trees, with class weights calibrated to compensate for the severe imbalance between normal and anomalous samples in the SIXray dataset.
+
+\subsection{Patch Wise Localization via Connected Component Analysis}
+
+Image level detection indicates whether a threat is present but provides no spatial guidance. When the classification stage flags an image as anomalous, the localization stage is activated to identify the precise region of interest.
+
+\textbf{Patch wise reconstruction.} Rather than analyzing the full image reconstruction holistically, the localization stage operates at fine spatial granularity. The input image is upscaled to $2240\times2240$ pixels and partitioned into non overlapping tiles. Each tile is independently reconstructed by the CAE, producing a tiled disparity map that retains high spatial resolution across the full image extent. This patch wise strategy allows the model to isolate reconstruction errors to small sub regions, which is critical for detecting compact threat objects that would otherwise be diluted in a global analysis.
+
+\textbf{Localization pipeline.} The spatial anomaly signal is refined through the following sequence of operations:
+
+\textbf{Step 1 -- Disparity Computation:}
+The disparity map
+
+\begin{equation}
+D(x,y) = \| I - R \|
+\end{equation}
+
+is computed from the tile wise reconstructions, producing a high resolution map of reconstruction error across the image.
+
+\textbf{Step 2 -- Thresholding:}
+A binary mask $M$ is obtained by applying a threshold $T$:
+
+\begin{equation}
+M(x,y) =
+\begin{cases}
+1, & \text{if } D(x,y) > T \\
+0, & \text{otherwise}
+\end{cases}
+\end{equation}
+
+The threshold $T$ is optimized on the validation set by sweeping candidate values and selecting the one that maximizes localization F1 at IoU $\geq 0.3$.
+
+\textbf{Step 3 -- Connected Component Extraction:}
+Connected component analysis (CCA) is applied to the binary mask $M$ to identify spatially contiguous regions of elevated reconstruction error. Each connected component represents a candidate threat region.
+
+\textbf{Step 4 -- Component Filtering:}
+Components are filtered by size, retaining only those whose area falls within a predefined range $[min\_size, max\_size]$. This removes both noise induced micro components and large background artifacts that are unlikely to correspond to localized threats.
+
+\textbf{Step 5 -- Bounding Box Generation:}
+Each surviving component is enclosed in a padded bounding box, projected back to the coordinate space of the original image, and returned as the localization output.
+
+The hyperparameters $T$, $min\_size$, and $max\_size$ are each tuned independently on the validation set. This post processing pipeline transforms the continuous disparity signal into discrete, interpretable bounding regions, directly actionable by human screening operators.
+
+\subsection{Design Rationale}
+
+Three principles guided the framework's design:
+
+\begin{itemize}
+    \item \textbf{Label efficiency:} The CAE requires no anomaly annotations during training, and the RF classifier requires only image level labels rather than pixel wise segmentation masks.
+    
+    \item \textbf{Modularity:} The classification and localization stages are decoupled and can be updated independently. For instance, the RF could be replaced with a neural classifier as labeled data accumulates, without retraining the CAE.
+    
+    \item \textbf{Computational practicality:} Both the feature extraction and Random Forest inference are lightweight, and the CAE architecture is kept shallow enough for deployment in time constrained security screening environments without GPU dependency at inference time.
+\end{itemize}
+
+\section{Experiments}
+
+\subsection{Dataset and Experimental Setup}
+
+All experiments were conducted on the SIXray dataset, a large scale benchmark for X-ray baggage inspection that contains over 1,059,231 images across six categories: gun, knife, wrench, pliers, scissors, and a normal class. The dataset is characterised by a highly imbalanced class distribution, with anomalous images constituting a small fraction of the total, which closely mirrors real world security screening conditions.
+
+\textbf{Autoencoder training.} Because the reconstruction based anomaly detection paradigm assumes the model learns an exclusive representation of normality, only normal (non threat) images were used during autoencoder training. Exposing the model to anomalous samples during training would undermine its ability to produce elevated reconstruction error on unseen threats, as the network would learn to reconstruct both normal and anomalous structures. The normal subset was split 80:20 for training and validation, respectively, with the validation split used exclusively for monitoring reconstruction loss and selecting model checkpoints.
+
+\textbf{Classification training.} To construct a labelled dataset for the downstream classification stage, normal and anomalous images were sampled at a 10:1 ratio, reflecting the natural scarcity of threat items in operational settings and deliberately preserving the class imbalance challenge. This combined set was partitioned using a 70:20:10 stratified split for training, validation, and testing, respectively, ensuring proportional representation of both classes across all splits.
+
+\textbf{Implementation details.} All models were implemented in TensorFlow. Images were resized to 224×224 pixels for the first stage classification pipeline, and upscaled to 2240×2240 for the patch wise localization stage to preserve fine grained spatial detail. Training was performed on an NVIDIA GPU with a batch size of 32 and the Adam optimiser. The composite loss function used for autoencoder training is defined as:
+
+\[
+\mathcal{L}_s = \alpha_1 \mathcal{L}_f + \alpha_2 \mathcal{L}_2
+\]
+
+where $\mathcal{L}_f$ is a perceptual feature loss computed in VGG feature space and $\mathcal{L}_2$ is the pixel wise mean squared error. Both loss weights ($\alpha_1$, $\alpha_2$) were set to $1.0$ following a grid search over $\{0.1,\,0.5,\,1.0,\,2.0\}$.
+
+\subsection{Autoencoder Architecture Comparison}
+
+To identify the optimal reconstruction backbone for anomaly detection, six architectures were evaluated under identical training conditions: a standard convolutional autoencoder (AE), a Masked Autoencoder (MAE), a Vision Transformer Autoencoder (ViT-AE), a Variational Autoencoder (VAE), and the GAN-based reconstruction models GANomaly, Skip-GANomaly, and Dense-GANomaly. The GAN based variants were included as baselines given their established use in X-ray anomaly detection literature.
+
+Reconstruction quality was assessed using two complementary metrics: Peak Signal to Noise Ratio (PSNR), which measures pixel level fidelity, and Structural Similarity Index (SSIM), which captures perceptual similarity in terms of luminance, contrast, and structure. Anomaly discriminability was separately quantified using Mean Absolute Error (MAE) and Mean Squared Error (MSE) of the reconstruction, computed over the held out test set containing both normal and anomalous images. A well suited backbone should produce low reconstruction error on normal images (indicating faithful reconstruction of learned patterns) and high error on anomalous images (indicating failure to reconstruct unseen threat structures).
+
+\begin{figure*}[h]
+\centering
+
+\includegraphics[width=0.7\linewidth]{images/model-performance.png}
+
+\vspace{0.5em}
+
+\includegraphics[width=0.7\linewidth]{images/reconstruction-errors.png}
+
+\caption{Encoder-Decoder performance comparison across different models}
+\label{fig:enc-dec experiments}
+\end{figure*}
+
+All architectures were trained for 100 epochs with early stopping based on validation loss, with the best checkpoint selected for evaluation.
+
+\subsection{Classification Model Selection}
+
+Disparity maps produced by the selected autoencoder are, in themselves, spatial residual images rather than classification ready signals. To convert these into image level anomaly predictions, a feature extraction step was applied: statistical descriptors including the mean, standard deviation, maximum value, and histogram based features were extracted from each disparity map, forming a compact fixed length feature vector per image.
+
+Three classical machine learning classifiers were trained and evaluated on these feature vectors: Random Forest (RF), Extreme Gradient Boosting (XGBoost), and Logistic Regression (LR). Classical classifiers were preferred over end to end deep classifiers here because the feature vectors are low dimensional (removing the need for deep capacity), the training set is small and imbalanced (where tree based ensembles and linear models are more robust than overparameterised networks), and the resulting pipeline remains computationally lightweight and interpretable.
 
 \begin{table}
 \begin{center}
-\begin{tabular}{|l|c|}
+\begin{tabular}{|l|c|c|c|}
 \hline
-Method & Frobnability \\
+Model & Accuracy & F1 & ROC-AUC \\
 \hline\hline
-Theirs & Frumpy \\
-Yours & Frobbly \\
-Ours & Makes one's heart Frob\\
+Random Forest & 0.82 -- 0.99 & 0.42 -- 0.62 & 0.85 -- 0.92 \\
+Extreme Gradient Boosting & 0.74 -- 0.84 & 0.32 -- 0.44 & 0.76 -- 0.79 \\
+Logistic Regression & 0.81 -- 0.87 & 0.30 -- 0.40 & 0.90 -- 0.91 \\
 \hline
 \end{tabular}
 \end{center}
-\caption{Results.   Ours is better.}
+\caption{Classification performance comparison across different models.}
+\label{tab:results}
 \end{table}
 
-\subsection{Mathematics}
+Each classifier was trained on the 70\% training split, tuned on the 20\% validation split, and evaluated on the held out 10\% test split. Performance was measured using Accuracy, F1 Score, and ROC-AUC. F1 was included alongside accuracy given the 10:1 class imbalance, where accuracy alone can be misleading. ROC-AUC was used to assess ranking ability independent of any particular classification threshold.
 
-Please number all of your sections and displayed equations.  It is
-important for readers to be able to refer to any particular equation.  Just
-because you didn't refer to it in the text doesn't mean some future reader
-might not need to refer to it.  It is cumbersome to have to use
-circumlocutions like ``the equation second from the top of page 3 column
-1''.  (Note that the ruler will not be present in the final copy, so is not
-an alternative to equation numbers).  All authors will benefit from reading
-Mermin's description~\cite{Mermin89} of how to write mathematics.
+\subsection{Localization Strategy Comparison}
 
+Once an image is classified as anomalous, the localization stage is triggered. Three spatial anomaly localization strategies were compared to identify the most effective approach for generating precise bounding box predictions:
 
-%-------------------------------------------------------------------------
-\subsection{References}
+\textbf{Connected Component Analysis (CCA).} The disparity map is thresholded to produce a binary mask, and connected components are extracted. Components are filtered by size and used directly to form padded bounding boxes.
 
-List and number all bibliographical references in 9-point Times,
-single-spaced, at the end of your paper. When referenced in the text,
-enclose the citation number in square brackets, for
-example~\cite{Authors06}.  Where appropriate, include the name(s) of
-editors of referenced books.
+\textbf{DBSCAN Clustering.} The coordinates of high disparity pixels are treated as a point cloud and clustered using DBSCAN, with bounding boxes formed around each identified cluster.
 
+\textbf{HDBSCAN Clustering.} A hierarchical variant of DBSCAN that automatically determines the number of clusters and is more robust to varying density, applied to the same high disparity pixel coordinates.
 
-%------------------------------------------------------------------------
-\subsection{Color}
+All three strategies were applied identically on the same disparity maps produced by the selected autoencoder. Localization performance was evaluated using mean Average Precision at IoU threshold 0.3 (mAP@0.3) and Mean IoU, following conventions established in weakly supervised object detection literature and consistent with prior work on the SIXray dataset.
 
-Color is valuable, and will be visible to readers of the electronic copy.
-However ensure that, when printed on a monochrome printer, no important
-information is lost by the conversion to grayscale.
+\clearpage
+
+\begin{figure*}[h]
+\centering
+
+\includegraphics[width=0.7\linewidth]{images/loc_sel.png}
+
+\caption{Localization performance comparison across different models}
+\label{fig:localization performance}
+\end{figure*}
+
+\subsection{Hyperparameter Optimization for Connected Component Analysis}
+
+Given that Connected Component Analysis was identified as the superior localization strategy, its three governing hyperparameters were systematically optimised: the binarization threshold $T$, the minimum component size, and the maximum component area ratio.
+
+\textbf{Binarization threshold $T$.} The threshold determines which pixels of the disparity map are considered anomalous. A sweep was conducted over $T \in \{65,68,70,72,75,78,80,82,85\}$, with localization accuracy (IoU $\geq 0.3$) recorded at each value. Thresholds that are too low admit large amounts of background noise into the binary mask, producing spurious components; thresholds that are too high suppress genuine anomaly signal in regions of moderate disparity.
+
+\textbf{Minimum component size.} A minimum pixel count filter removes small connected components that are likely noise rather than true threat regions. The minimum size was swept over the range $\{8,10,12,15,18,20,25,30,40,50,60,70,80,90,100,110,120\}$ pixels.
+
+\textbf{Maximum area ratio.} An upper bound on the fraction of the image area that any single component may occupy prevents the entire disparity map from being flagged as a single diffuse anomaly region, a common failure mode when the reconstruction error is distributed globally rather than locally. This ratio was swept over $\{0.25,0.30,0.35,0.40,0.45,0.50,0.55,0.60,0.75,0.90\}$.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/threshold.png}
+    \small (a) Threshold
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/min_size.png}
+    \small (b) Min pixel count
+\end{minipage}
+\hfill
+\begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{images/max_area.png}
+    \small (c) Max area ratio
+\end{minipage}
+\caption{Parameter experimentation results}
+\end{figure}
+
+Each hyperparameter was optimised independently, holding the others at their previously determined optimal values, using a sequential grid search. Final values were selected based on peak localization accuracy on the validation set.
+
+\section{Results and Discussion}
+
+The proposed two-stage reconstruction-guided hybrid framework was evaluated on the SIXray dataset for both anomaly detection and anomaly localization tasks. The framework demonstrated strong performance in identifying suspicious baggage scans while accurately localizing anomalous regions under heavily cluttered X-ray environments.
+
+For image-level anomaly detection, the proposed framework achieved a detection ROC-AUC score of 0.916 and an overall classification accuracy of 99.4\%. These results indicate that reconstruction-based disparity features extracted from the convolutional autoencoder effectively capture the distinction between normal and anomalous baggage scans. The use of Random Forest classification on reconstruction-derived features further improved the robustness of anomaly detection while maintaining computational efficiency.
+
+For anomaly localization, the proposed patch-wise reconstruction and connected component localization framework achieved a localization accuracy of 0.908 at IoU $\geq$ 0.3 together with a mean IoU score of 0.502. The localization stage successfully identified suspicious regions even under severe object overlap and cluttered baggage conditions commonly observed in security X-ray imagery.
+
+Table~\ref{tab:comparison_results} compares the proposed framework with several existing reconstruction-based anomaly detection approaches evaluated on the SIXray dataset. GANomaly \cite{akcay2018ganomaly} demonstrated promising anomaly detection capability but lacked an explicit localization mechanism. Skip-GANomaly \cite{akcay2019skip} improved reconstruction quality through skip connections and achieved higher detection performance. Dense-GANomaly \cite{denseganomaly2020} further enhanced feature propagation using dense connectivity, achieving strong detection accuracy. However, these approaches primarily focused on image-level anomaly detection and did not provide robust localization performance for concealed threat objects.
+
+In contrast, the proposed framework combines reconstruction-based anomaly learning with spatial localization analysis, enabling both accurate anomaly detection and precise localization of suspicious regions.
+
+\begin{table}[H]
+	\centering
+	\caption{Comparison of the proposed framework with existing approaches on SIXray.}
+	\label{tab:comparison_results}
+	\resizebox{\columnwidth}{!}{%
+		\begin{tabular}{lcccc}
+			\toprule
+			Method & Det. AUC & Accuracy (\%) & Loc. Acc. & Mean IoU \\
+			\midrule
+			GANomaly \cite{akcay2018ganomaly} & 0.75 -- 0.80 & 85 -- 90 & N/A & N/A \\
+			Skip-GANomaly \cite{akcay2019skip} & 0.90 -- 0.95 & 90 -- 95 & N/A & N/A \\
+			Dense-GANomaly \cite{denseganomaly2020} & 0.92 -- 0.98 & 92 -- 96 & N/A & N/A \\
+			Patch SVDD \cite{yi2020patchsvdd} & 0.89 & 91.2 & 0.71 & 0.39 \\
+			PaDiM \cite{defard2020padim} & 0.91 & 93.4 & 0.78 & 0.44 \\
+			UAI Segmentation \cite{hassan2021unsupervised} & 0.90 & 95.1 & 0.794 & 0.46 \\
+			\textbf{Proposed} & \textbf{0.916} & \textbf{99.4} & \textbf{0.908} & \textbf{0.502} \\
+			\bottomrule
+		\end{tabular}%
+	}
+\end{table}
+
+Qualitative results further demonstrated that the proposed framework accurately localized concealed threat objects despite heavy clutter and overlapping baggage contents. The RGB disparity maps generated by the patch-wise autoencoder successfully highlighted suspicious regions while suppressing normal baggage structures. Compared to grayscale reconstruction approaches used in previous studies, preserving RGB disparity information improved anomaly separability and reduced localization ambiguity.
+
+The connected component localization strategy also outperformed clustering-based approaches such as DBSCAN and HDBSCAN by producing spatially consistent bounding boxes with fewer fragmented detections. The patch-wise reconstruction mechanism enabled fine-grained localization of small concealed objects, which is particularly important in real-world baggage security screening applications where threat items may occupy only a small region of the X-ray scan.
+
+Overall, the results demonstrate that the proposed framework provides an effective and scalable solution for unsupervised baggage threat detection and localization without requiring large annotated datasets. The combination of reconstruction-based learning, RGB disparity analysis, and connected component localization enables strong generalization capability while maintaining high detection and localization performance on the SIXray dataset.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper presented a Two-Stage Reconstruction-Guided Hybrid Framework for 
+unsupervised anomaly detection and localization in baggage X-ray security screening. 
+By training a Convolutional Autoencoder exclusively on normal baggage images, the 
+proposed system avoids the annotation bottleneck that limits supervised approaches, 
+while retaining discriminative power through a Random Forest classifier trained on 
+features derived from the pixel-wise disparity map. The patch-wise reconstruction 
+strategy in the second stage, combined with connected component analysis, provides 
+fine-grained spatial localization of anomalous regions without requiring any 
+ground-truth defect annotations at training time.
+
+Experiments on the SIXray benchmark demonstrate that the proposed framework achieves 
+a Detection ROC-AUC of 0.916 and a detection accuracy of 99.4\%, outperforming 
+established adversarial baselines including GANomaly, Skip-GANomaly, and 
+Dense-GANomaly. More significantly, the framework extends beyond image-level 
+detection to provide actionable spatial output, achieving a localization accuracy 
+of 0.908 at IoU $\geq$ 0.30 and a mean IoU of 0.502 - a capability that prior 
+reconstruction-based methods do not report, and one that is essential for practical 
+deployment in operator-assisted screening workflows.
+
+These results support two broader conclusions. First, the combination of unsupervised 
+representation learning with lightweight supervised classification represents a 
+pragmatically effective design point: it sidesteps the data collection challenges 
+of fully supervised systems while avoiding the instability and computational overhead 
+of adversarial training. Second, simple, interpretable localization pipelines based 
+on thresholded disparity masks and connected component analysis can achieve 
+competitive spatial precision without the complexity of attention-based or 
+segmentation-based alternatives.
+
+\noindent \textbf{Limitations and Future Work.} The current framework operates on 
+2D single-view X-ray images, and reconstruction quality degrades in regions of heavy 
+occlusion where multiple dense objects overlap. Future work will explore multi-view 
+fusion and 3D Computed Tomography (CT) data to resolve ambiguities that are 
+fundamentally irrecoverable from a single projection. Additionally, the fixed 
+threshold applied during disparity map binarization is sensitive to image-level 
+brightness variation; adaptive thresholding strategies or learned threshold 
+predictors trained on reconstruction confidence will be investigated to improve 
+robustness. Finally, integrating Continual Learning mechanisms to update the 
+autoencoder's representation of ``normal'' content dynamically without full 
+retraining will be essential for adapting to evolving travel trends and 
+seasonal luggage variation in live deployment settings.
 
 \bibliography{egbib}
 \end{document}
