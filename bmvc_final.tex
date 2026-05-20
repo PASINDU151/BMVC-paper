@@ -97,8 +97,8 @@ prohibited items is additionally expensive and logistically dangerous.
 Unsupervised Anomaly Detection (UAD) offers a compelling alternative by reframing 
 the problem: rather than recognizing specific threats, the system learns what 
 \textit{normal} baggage looks like and flags statistical deviations for human review. 
-Reconstruction-based methods, notably GANomaly~\cite{anomalib2022akcay} and 
-Skip-GANomaly~\cite{anomalib2022akcay}, exploit the intuition that an autoencoder trained 
+Reconstruction-based methods, notably GANomaly~\cite{akcay2018ganomaly} and 
+Skip-GANomaly~\cite{akcay2019skip}, exploit the intuition that an autoencoder trained 
 exclusively on normal images will fail to faithfully reconstruct anomalous content, 
 producing an elevated reconstruction error at the location of the threat. While this 
 approach is theoretically well-motivated, existing adversarial reconstruction methods 
@@ -165,7 +165,7 @@ Motivated by these limitations, our work proposes an unsupervised reconstruction
 
 \subsection{Overview}
 
-The proposed framework addresses automated baggage threat detection through a two stage hybrid pipeline that combines unsupervised reconstruction based learning with supervised classification. The core insight is that a convolutional autoencoder (CAE) trained exclusively on normal X-ray images will reconstruct anomalous inputs poorly, producing elevated per pixel error in regions containing threat objects. This reconstruction error, captured as a disparity map, serves as the anomaly signal driving both image level detection and spatial localization.
+The proposed framework addresses automated baggage threat detection through a two stage hybrid pipeline that combines unsupervised reconstruction based learning with supervised classification. The core insight is that a convolutional autoencoder (CAE) trained exclusively on normal X-ray images will reconstruct anomalous inputs poorly \cite{bergmann2019mvtec, akcay2018ganomaly}, producing elevated per pixel error in regions containing threat objects. This reconstruction error, captured as a disparity map, serves as the anomaly signal driving both image level detection and spatial localization.
 
 The framework is motivated by two practical realities of real world screening: first, anomalous baggage content is rare and costly to annotate, making purely supervised approaches brittle; second, operators require not just a detection flag but a spatial indicator pointing to the suspect region. The first stage feeds disparity map features into a classifier to produce an image level binary decision. If an anomaly is detected, the second stage triggers a patch wise reconstruction process, followed by connected component analysis, to localize and bound the threatening region within the image.
 
@@ -184,7 +184,7 @@ The framework is motivated by two practical realities of real world screening: f
 
 The foundation of both stages is a convolutional autoencoder trained solely on normal (threat free) X-ray images from the SIXray dataset. Because the model only learns to reconstruct the distribution of benign baggage content, it generalizes poorly to anomalous inputs, producing higher reconstruction error precisely where threats are present.
 
-\textbf{Architecture.} The encoder consists of four convolutional blocks, each comprising a $3\times3$ convolution, batch normalization, and ReLU activation, followed by $2\times2$ max pooling to downsample the spatial resolution. Filter depth increases progressively ($32 \to 64 \to 128 \to 256$), enabling the network to capture increasingly abstract representations of normal baggage structure at each scale. The bottleneck produces a compact latent vector encoding the essential structure of the input. The decoder mirrors the encoder symmetrically, using transposed convolutions to progressively upsample back to the original resolution of $224\times224$, with a final sigmoid activation to constrain pixel values to $[0,1]$.
+\textbf{Architecture.} The encoder consists of four convolutional blocks, each comprising a $3\times3$ convolution, batch normalization, and ReLU activation, followed by $2\times2$ max pooling to downsample the spatial resolution. Filter depth increases progressively ($32 \to 64 \to 128 \to 256$), enabling the network to capture increasingly abstract representations of normal baggage structure at each scale. The bottleneck produces a compact latent vector encoding the essential structure of the input. The decoder mirrors the encoder symmetrically, using transposed convolutions to progressively upsample back to the original resolution of $224\times224$, with a final sigmoid activation to constrain pixel values to $[0,1]$. \cite{patchae2023}
 
 \begin{figure*}[h]
 \centering
@@ -195,7 +195,7 @@ The foundation of both stages is a convolutional autoencoder trained solely on n
 \label{fig:autoencoder}
 \end{figure*}
 
-\textbf{Training objective.} A key design choice is the use of a combined loss function that jointly optimizes pixel level fidelity and perceptual feature similarity:
+\textbf{Training objective.} A key design choice is the use of a combined loss function that jointly optimizes pixel level fidelity and perceptual feature similarity \cite{task2025omar}:
 
 \begin{equation}
 \mathcal{L}_s = \alpha_1 \mathcal{L}_f + \alpha_2 \mathcal{L}_2
@@ -234,15 +234,15 @@ This map assigns high values to regions where the model's reconstruction deviate
 
 While the raw disparity map encodes spatial anomaly information, feeding it directly to a classifier would be high dimensional and noisy. Instead, a compact set of statistical features is extracted from $D$ to produce a fixed length descriptor for downstream classification.
 
-\textbf{Feature extraction.} Features are derived from the disparity map to capture both global reconstruction error magnitude and local spatial structure. These include global statistics (mean, standard deviation, maximum, and upper percentile values of $D$), spatial concentration metrics (the proportion of pixels exceeding an error threshold), histogram based distribution descriptors, and regional block statistics capturing localized error patterns that may correspond to small threat objects. The resulting feature vector compactly summarizes the anomaly signal in a form suitable for classical machine learning, while preserving interpretability and robustness under limited labeled data.
+\textbf{Feature extraction.} Features are derived from the disparity map to capture both global reconstruction error magnitude and local spatial structure \cite{hassan2021unsupervised}. These include global statistics (mean, standard deviation, maximum, and upper percentile values of $D$), spatial concentration metrics (the proportion of pixels exceeding an error threshold), histogram based distribution descriptors, and regional block statistics capturing localized error patterns that may correspond to small threat objects. The resulting feature vector compactly summarizes the anomaly signal in a form suitable for classical machine learning, while preserving interpretability and robustness under limited labeled data.
 
-\textbf{Classifier selection.} The disparity map features are used to train a Random Forest classifier. Random Forests are well suited to this setting for three reasons: the feature vectors are low-dimensional, making deep classifiers unnecessary; the ensemble's bootstrap aggregation provides robustness to the feature scale heterogeneity inherent in mixed statistical descriptors; and class imbalance can be directly addressed by setting tree-level class weights inversely proportional to class frequency, without requiring oversampling or data augmentation. The ensemble comprises 200 decision trees, with class weights calibrated to compensate for the severe imbalance between normal and anomalous samples in the SIXray dataset.
+\textbf{Classifier selection.} The disparity map features are used to train a Random Forest classifier. Random Forests are well suited to this setting for three reasons: the feature vectors are low-dimensional, making deep classifiers unnecessary; the ensemble's bootstrap aggregation provides robustness to the feature scale heterogeneity inherent in mixed statistical descriptors; and class imbalance can be directly addressed by setting tree-level class weights inversely proportional to class frequency \cite{baggage2022abdelfatah, sixray2019lingxi}, without requiring oversampling or data augmentation. The ensemble comprises 200 decision trees, with class weights calibrated to compensate for the severe imbalance between normal and anomalous samples in the SIXray dataset.
 
 \subsection{Patch Wise Localization via Connected Component Analysis}
 
 Image level detection indicates whether a threat is present but provides no spatial guidance. When the classification stage flags an image as anomalous, the localization stage is activated to identify the precise region of interest.
 
-\textbf{Patch wise reconstruction.} Rather than analyzing the full image reconstruction holistically, the localization stage operates at fine spatial granularity. The input image is upscaled to $2240\times2240$ pixels and partitioned into non overlapping tiles. Each tile is independently reconstructed by the CAE, producing a tiled disparity map that retains high spatial resolution across the full image extent. This patch wise strategy allows the model to isolate reconstruction errors to small sub regions, which is critical for detecting compact threat objects that would otherwise be diluted in a global analysis.
+\textbf{Patch wise reconstruction.} Rather than analyzing the full image reconstruction holistically, the localization stage operates at fine spatial granularity \cite{patchae2023, yi2020patchsvdd}. The input image is upscaled to $2240\times2240$ pixels and partitioned into non overlapping tiles \cite{patchae2023}. Each tile is independently reconstructed by the CAE, producing a tiled disparity map that retains high spatial resolution across the full image extent. This patch wise strategy allows the model to isolate reconstruction errors to small sub regions, which is critical for detecting compact threat objects that would otherwise be diluted in a global analysis.
 
 \textbf{Localization pipeline.} The spatial anomaly signal is refined through the following sequence of operations:
 
@@ -266,16 +266,16 @@ M(x,y) =
 \end{cases}
 \end{equation}
 
-The threshold $T$ is optimized on the validation set by sweeping candidate values and selecting the one that maximizes localization F1 at IoU $\geq 0.3$.
+The threshold $T$ is optimized on the validation set by sweeping candidate values and selecting the one that maximizes localization F1 at IoU $\geq 0.3$ \cite{bergmann2019mvtec, yi2020patchsvdd}.
 
 \textbf{Step 3 -- Connected Component Extraction:}
-Connected component analysis (CCA) is applied to the binary mask $M$ to identify spatially contiguous regions of elevated reconstruction error. Each connected component represents a candidate threat region.
+Connected component analysis (CCA) is applied \cite{hassan2021unsupervised} to the binary mask $M$ to identify spatially contiguous regions of elevated reconstruction error. Each connected component represents a candidate threat region.
 
 \textbf{Step 4 -- Component Filtering:}
-Components are filtered by size, retaining only those whose area falls within a predefined range $[min\_size, max\_size]$. This removes both noise induced micro components and large background artifacts that are unlikely to correspond to localized threats.
+Components are filtered by size \cite{hassan2021unsupervised}, retaining only those whose area falls within a predefined range $[min\_size, max\_size]$. This removes both noise induced micro components and large background artifacts that are unlikely to correspond to localized threats.
 
 \textbf{Step 5 -- Bounding Box Generation:}
-Each surviving component is enclosed in a padded bounding box, projected back to the coordinate space of the original image, and returned as the localization output.
+Each surviving component is enclosed in a padded bounding box \cite{defard2020padim}, projected back to the coordinate space of the original image, and returned as the localization output.
 
 The hyperparameters $T$, $min\_size$, and $max\_size$ are each tuned independently on the validation set. This post processing pipeline transforms the continuous disparity signal into discrete, interpretable bounding regions, directly actionable by human screening operators.
 
@@ -284,9 +284,9 @@ The hyperparameters $T$, $min\_size$, and $max\_size$ are each tuned independent
 Three principles guided the framework's design:
 
 \begin{itemize}
-    \item \textbf{Label efficiency:} The CAE requires no anomaly annotations during training, and the RF classifier requires only image level labels rather than pixel wise segmentation masks.
+    \item \textbf{Label efficiency:} The CAE requires no anomaly annotations \cite{akcay2018ganomaly, bergmann2019mvtec} during training, and the RF classifier requires only image level labels rather than pixel wise segmentation masks.
     
-    \item \textbf{Modularity:} The classification and localization stages are decoupled and can be updated independently. For instance, the RF could be replaced with a neural classifier as labeled data accumulates, without retraining the CAE.
+    \item \textbf{Modularity:} The classification and localization stages are decoupled \cite{hassan2021unsupervised} and can be updated independently. For instance, the RF could be replaced with a neural classifier as labeled data accumulates, without retraining the CAE.
     
     \item \textbf{Computational practicality:} Both the feature extraction and Random Forest inference are lightweight, and the CAE architecture is kept shallow enough for deployment in time constrained security screening environments without GPU dependency at inference time.
 \end{itemize}
