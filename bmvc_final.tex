@@ -167,16 +167,18 @@ Motivated by these limitations, our work proposes an unsupervised reconstruction
 
 The proposed framework addresses automated baggage threat detection through a two stage hybrid pipeline that combines unsupervised reconstruction based learning with supervised classification. The core insight is that a convolutional autoencoder (CAE) trained exclusively on normal X-ray images will reconstruct anomalous inputs poorly, producing elevated per pixel error in regions containing threat objects. This reconstruction error, captured as a disparity map, serves as the anomaly signal driving both image level detection and spatial localization.
 
-\begin{figure*}[t]
+The framework is motivated by two practical realities of real world screening: first, anomalous baggage content is rare and costly to annotate, making purely supervised approaches brittle; second, operators require not just a detection flag but a spatial indicator pointing to the suspect region. The first stage feeds disparity map features into a classifier to produce an image level binary decision. If an anomaly is detected, the second stage triggers a patch wise reconstruction process, followed by connected component analysis, to localize and bound the threatening region within the image.
+
+\clearpage
+
+\begin{figure}[h]
 \centering
 
 \includegraphics[width=0.7\linewidth]{images/encoder.png}
 
 \caption{Two stage pipeline}
 \label{fig:two-stage-pipeline}
-\end{figure*}
-
-The framework is motivated by two practical realities of real world screening: first, anomalous baggage content is rare and costly to annotate, making purely supervised approaches brittle; second, operators require not just a detection flag but a spatial indicator pointing to the suspect region. The first stage feeds disparity map features into a classifier to produce an image level binary decision. If an anomaly is detected, the second stage triggers a patch wise reconstruction process, followed by connected component analysis, to localize and bound the threatening region within the image.
+\end{figure}
 
 \subsection{Convolutional Autoencoder with Combined Loss}
 
@@ -362,6 +364,10 @@ Once an image is classified as anomalous, the localization stage is triggered. T
 
 \textbf{HDBSCAN Clustering.} A hierarchical variant of DBSCAN that automatically determines the number of clusters and is more robust to varying density, applied to the same high disparity pixel coordinates.
 
+All three strategies were applied identically on the same disparity maps produced by the selected autoencoder. Localization performance was evaluated using mean Average Precision at IoU threshold 0.3 (mAP@0.3) and Mean IoU, following conventions established in weakly supervised object detection literature and consistent with prior work on the SIXray dataset.
+
+\clearpage
+
 \begin{figure*}[h]
 \centering
 
@@ -370,8 +376,6 @@ Once an image is classified as anomalous, the localization stage is triggered. T
 \caption{Localization performance comparison across different models}
 \label{fig:localization performance}
 \end{figure*}
-
-All three strategies were applied identically on the same disparity maps produced by the selected autoencoder. Localization performance was evaluated using mean Average Precision at IoU threshold 0.3 (mAP@0.3) and Mean IoU, following conventions established in weakly supervised object detection literature and consistent with prior work on the SIXray dataset.
 
 \subsection{Hyperparameter Optimization for Connected Component Analysis}
 
