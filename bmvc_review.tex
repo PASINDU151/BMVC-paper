@@ -239,8 +239,6 @@ The proposed framework addresses automated baggage threat detection through a tw
 
 The framework is motivated by two practical realities of real world screening: first, anomalous baggage content is rare and costly to annotate, making purely supervised approaches brittle; second, operators require not just a detection flag but a spatial indicator pointing to the suspect region. The first stage feeds disparity map features into a classifier to produce an image level binary decision. If an anomaly is detected, the second stage triggers a patch wise reconstruction process, followed by connected component analysis, to localize and bound the threatening region within the image.
 
-\clearpage
-
 \begin{figure}[h]
 \centering
 
@@ -406,7 +404,7 @@ Disparity maps produced by the selected autoencoder are, in themselves, spatial 
 
 Three classical machine learning classifiers were trained and evaluated on these feature vectors: Random Forest (RF), Extreme Gradient Boosting (XGBoost), and Logistic Regression (LR). Classical classifiers were preferred over end to end deep classifiers here because the feature vectors are low dimensional (removing the need for deep capacity), the training set is small and imbalanced (where tree based ensembles and linear models are more robust than overparameterised networks), and the resulting pipeline remains computationally lightweight and interpretable.
 
-\begin{table}
+\begin{table}[ht]
 \begin{center}
 \begin{tabular}{|l|c|c|c|}
 \hline
