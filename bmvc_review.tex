@@ -137,22 +137,99 @@ Our contributions are as follows:
 % results, and Section~\ref{sec:conclusion} concludes with directions for future work.
 
 \section{Related Work}
+\label{sec:related}
 
-Automatic threat detection in baggage X-ray imagery has become an active area of research due to the increasing demand for efficient and reliable security screening systems in airports, transportation hubs, and public facilities. Earlier baggage threat detection methods mainly relied on handcrafted feature extraction techniques such as SIFT, SURF, FAST-SURF, Bag-of-Words (BoW), and Support Vector Machines (SVMs) \cite{bastan2011,riffo2015,mery2016,kundegorski2016}. Although these methods achieved reasonable performance in controlled environments, they suffered from poor generalization capability under severe object overlap, cluttered baggage contents, and varying scanner properties.
+Automatic threat detection in baggage X-ray imagery has become an active area of 
+research due to the increasing demand for efficient and reliable security screening 
+systems in airports, transportation hubs, and public facilities.
 
-The emergence of deep learning significantly improved the performance of baggage threat detection systems. Supervised deep learning approaches employed convolutional neural networks for classification, detection, and segmentation of prohibited items in X-ray scans. Akcay et al. \cite{akcay2016} introduced transfer learning using GoogLeNet for baggage threat classification, while Jaccard et al. \cite{jaccard2017} utilized VGG-19 for suspicious object recognition. Subsequently, one-stage and two-stage object detectors such as Faster R-CNN, RetinaNet, and Mask R-CNN were adapted for X-ray imagery \cite{liu2018,gaus2019a,gaus2019b}. To address severe class imbalance in the SIXray dataset, Miao et al. \cite{miao2019sixray} proposed the Class-Balanced Hierarchical Refinement (CHR) framework. Similarly, Hassan et al. proposed contour-driven object detectors including Cascaded Structure Tensors (CST) and Dual Tensor-Shot Detector (DTSD) for heavily occluded baggage threat detection \cite{hassan2020cst,hassan2020dtsd}. Wei et al. \cite{wei2020doam} further introduced the De-Occlusion Attention Module (DOAM) to improve localization performance under severe overlap conditions.
+\subsection{Classical and Feature-Based Methods}
 
-Despite their strong detection performance, supervised approaches require large-scale annotated datasets with bounding boxes or segmentation masks. However, collecting and annotating prohibited items in X-ray imagery is expensive, time-consuming, and often impractical due to the rarity of threat samples. Furthermore, supervised models often require retraining or fine-tuning when new threat categories or scanner configurations are introduced \cite{gaus2019a}.
+Earlier baggage threat detection methods mainly relied on handcrafted feature 
+extraction techniques such as SIFT, SURF, FAST-SURF, Bag-of-Words (BoW), and 
+Support Vector Machines (SVMs)~\cite{bastan2011,riffo2015,mery2016,kundegorski2016}. 
+Although these methods achieved reasonable performance in controlled environments, 
+they suffered from poor generalization capability under severe object overlap, 
+cluttered baggage contents, and varying scanner properties.
 
-To reduce annotation dependency, researchers explored semi-supervised and unsupervised anomaly detection approaches. One of the earliest and most influential frameworks was AnoGAN \cite{schlegl2017anogan}, which utilized Generative Adversarial Networks (GANs) trained only on normal images. AnoGAN assumed that anomalies could be identified through reconstruction errors between the original image and generated samples. However, AnoGAN required expensive iterative latent space optimization during inference, resulting in slow test-time performance. To overcome this limitation, BiGAN \cite{donahue2016bigan} and EGBAD \cite{zenati2018egbad} introduced encoder networks to directly map images into latent representations. GANomaly \cite{akcay2018ganomaly} further improved anomaly detection by combining GANs with encoder-decoder architectures, significantly reducing inference complexity. Skip-GANomaly \cite{akcay2019skip} enhanced reconstruction quality by incorporating skip connections into the generator network.
+\subsection{Supervised Deep Learning for Threat Detection}
 
-Although GAN-based methods demonstrated strong anomaly detection capability, they often suffered from unstable adversarial training and mode collapse problems. Consequently, reconstruction-based autoencoder methods gained popularity due to their simpler and more stable training process. Autoencoders trained exclusively on normal images reconstruct expected patterns while producing high reconstruction errors for anomalous regions \cite{bergmann2019mvtec}. Reconstruction disparity maps generated from the difference between original and reconstructed images became a popular approach for anomaly localization.
+The emergence of deep learning significantly improved the performance of baggage 
+threat detection systems. Akcay et al.~\cite{akcay2016} introduced transfer learning 
+using GoogLeNet for baggage threat classification, while Jaccard et al.~\cite{jaccard2017} 
+utilised VGG-19 for suspicious object recognition. Subsequently, one-stage and 
+two-stage object detectors such as Faster R-CNN, RetinaNet, and Mask R-CNN were 
+adapted for X-ray imagery~\cite{liu2018,gaus2019a,gaus2019b}. To address severe 
+class imbalance in the SIXray dataset, Miao et al.~\cite{miao2019sixray} proposed 
+the Class-Balanced Hierarchical Refinement (CHR) framework. Similarly, Hassan et al. 
+proposed contour-driven object detectors including Cascaded Structure Tensors (CST) 
+and Dual Tensor-Shot Detector (DTSD) for heavily occluded baggage threat 
+detection~\cite{hassan2020cst,hassan2020dtsd}. Wei et al.~\cite{wei2020doam} further 
+introduced the De-Occlusion Attention Module (DOAM) to improve localization performance 
+under severe overlap conditions.
 
-Recent research has focused on patch-based anomaly detection frameworks to improve localization precision. Patch SVDD \cite{yi2020patchsvdd} introduced patch-level feature modeling for anomaly segmentation, while PaDiM \cite{defard2020padim} modeled multivariate Gaussian distributions of patch embeddings for localization. CutPaste \cite{li2021cutpaste} employed self-supervised synthetic anomalies to improve feature representation learning. More recently, Patch-wise Auto-Encoder for Visual Anomaly Detection \cite{patchae2023} proposed fine-grained patch reconstruction where each latent feature independently reconstructs spatially corresponding image regions. These methods demonstrated that patch-level reconstruction significantly improves anomaly localization performance.
+Despite their strong detection performance, supervised approaches require large-scale 
+annotated datasets with bounding boxes or segmentation masks. Collecting and annotating 
+prohibited items in X-ray imagery is expensive, time-consuming, and often impractical 
+due to the rarity of threat samples. Furthermore, supervised models often require 
+retraining or fine-tuning when new threat categories or scanner configurations are 
+introduced~\cite{gaus2019a}.
 
-In the X-ray security domain, unsupervised anomaly localization remains relatively underexplored. Hassan et al. \cite{hassan2021unsupervised} proposed an unsupervised anomaly instance segmentation framework for baggage threat recognition using reconstruction disparity maps together with clustering-based localization. While the framework demonstrated promising anomaly localization capability on X-ray baggage imagery, the reported F1-score of 0.4831 on the SIXray dataset indicates that there is still considerable room for improvement in robust anomaly localization under heavily cluttered baggage environments.
+\subsection{GAN-Based Unsupervised Anomaly Detection}
 
-Motivated by these limitations, our work proposes an unsupervised reconstruction-based anomaly detection and localization framework using patch-wise autoencoder reconstruction and RGB disparity map analysis.
+To reduce annotation dependency, researchers explored semi-supervised and unsupervised 
+anomaly detection approaches. AnoGAN~\cite{schlegl2017anogan} was one of the earliest 
+and most influential frameworks, utilising Generative Adversarial Networks trained only 
+on normal images and identifying anomalies through reconstruction errors between the 
+original image and generated samples. However, AnoGAN required expensive iterative 
+latent space optimisation during inference, resulting in slow test-time performance. 
+BiGAN~\cite{donahue2016bigan} and EGBAD~\cite{zenati2018egbad} subsequently introduced 
+encoder networks to directly map images into latent representations, overcoming this 
+limitation. GANomaly~\cite{akcay2018ganomaly} further improved anomaly detection by 
+combining GANs with encoder-decoder architectures, significantly reducing inference 
+complexity. Skip-GANomaly~\cite{akcay2019skip} enhanced reconstruction quality by 
+incorporating skip connections into the generator network.
+
+Although GAN-based methods demonstrated strong anomaly detection capability, they often 
+suffered from unstable adversarial training and mode collapse problems.
+
+\subsection{Reconstruction-Based Autoencoder Methods}
+
+Reconstruction-based autoencoder methods gained popularity as a more stable alternative 
+to adversarial training. Autoencoders trained exclusively on normal images reconstruct 
+expected patterns while producing high reconstruction errors for anomalous 
+regions~\cite{bergmann2019mvtec}. Reconstruction disparity maps generated from the 
+difference between original and reconstructed images became a widely adopted approach 
+for anomaly localization, offering both a detection signal and interpretable spatial 
+feedback for downstream analysis.
+
+\subsection{Patch-Based Anomaly Detection}
+
+Recent research has focused on patch-based anomaly detection frameworks to improve 
+localization precision. Patch SVDD~\cite{yi2020patchsvdd} introduced patch-level 
+feature modelling for anomaly segmentation, while PaDiM~\cite{defard2020padim} modelled 
+multivariate Gaussian distributions of patch embeddings for localization. 
+CutPaste~\cite{li2021cutpaste} employed self-supervised synthetic anomalies to improve 
+feature representation learning. More recently, Patch-wise Auto-Encoder for Visual 
+Anomaly Detection~\cite{patchae2023} proposed fine-grained patch reconstruction where 
+each latent feature independently reconstructs spatially corresponding image regions. 
+These methods collectively demonstrated that patch-level reconstruction significantly 
+improves anomaly localization performance over image-level approaches.
+
+\subsection{Unsupervised Anomaly Localization in X-Ray Security}
+
+In the X-ray security domain, unsupervised anomaly localization remains relatively 
+underexplored. Hassan et al.~\cite{hassan2021unsupervised} proposed an unsupervised 
+anomaly instance segmentation framework for baggage threat recognition, combining 
+reconstruction disparity maps with clustering-based localization. While the framework 
+demonstrated promising capability on X-ray baggage imagery, the reported F1-score 
+of 0.4831 on the SIXray dataset indicates considerable room for improvement in robust 
+anomaly localization under heavily cluttered baggage environments.
+
+Motivated by these limitations, the proposed framework advances this direction by 
+combining patch-wise autoencoder reconstruction with RGB disparity map analysis and 
+connected component-based spatial refinement, targeting improved localization precision 
+without requiring any anomaly annotations at training time.
 
 \section{Proposed Method}
 
